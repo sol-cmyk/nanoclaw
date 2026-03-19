@@ -9,6 +9,9 @@
  * but cannot reach anything else.
  */
 import { exec } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { promisify } from 'util';
 
 import { CONTAINER_RUNTIME_BIN } from './container-runtime.js';
@@ -40,9 +43,7 @@ async function networkExists(name: string): Promise<boolean> {
 
 async function containerRunning(name: string): Promise<boolean> {
   try {
-    const out = await dockerExec(
-      `inspect -f "{{.State.Running}}" ${name}`,
-    );
+    const out = await dockerExec(`inspect -f "{{.State.Running}}" ${name}`);
     return out === 'true';
   } catch {
     return false;
@@ -56,7 +57,10 @@ export async function ensureNetworks(): Promise<void> {
   }
   if (!(await networkExists(SANDBOX_NETWORK))) {
     await dockerExec(`network create --internal ${SANDBOX_NETWORK}`);
-    logger.info({ network: SANDBOX_NETWORK }, 'Created sandbox network (internal, no internet)');
+    logger.info(
+      { network: SANDBOX_NETWORK },
+      'Created sandbox network (internal, no internet)',
+    );
   }
 }
 
@@ -69,24 +73,37 @@ export async function ensureProxyRunning(): Promise<void> {
   // Stop stale container if exists but not running
   try {
     await dockerExec(`rm -f ${PROXY_CONTAINER_NAME}`);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   const secrets = readEnvFile(['ANTHROPIC_API_KEY']);
   if (!secrets.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not found in .env — cannot start proxy');
   }
 
+  // Write a temporary env file for the proxy (avoids secret in docker run args / docker inspect)
+  const envFilePath = path.join(os.tmpdir(), '.nanoclaw-proxy-env');
+  fs.writeFileSync(envFilePath, `ANTHROPIC_API_KEY=${secrets.ANTHROPIC_API_KEY}\n`, {
+    mode: 0o600,
+  });
+
   // Start proxy on egress network
+  // --user 65534:65534 = nobody (non-root, matches Dockerfile USER proxyuser fallback)
   await dockerExec(
     `run -d --rm ` +
-    `--name ${PROXY_CONTAINER_NAME} ` +
-    `--network ${EGRESS_NETWORK} ` +
-    `-e ANTHROPIC_API_KEY=${secrets.ANTHROPIC_API_KEY} ` +
-    `--read-only ` +
-    `--cap-drop=ALL ` +
-    `--security-opt=no-new-privileges:true ` +
-    PROXY_IMAGE,
+      `--name ${PROXY_CONTAINER_NAME} ` +
+      `--network ${EGRESS_NETWORK} ` +
+      `--env-file ${envFilePath} ` +
+      `--user 9999:9999 ` +
+      `--read-only ` +
+      `--cap-drop=ALL ` +
+      `--security-opt=no-new-privileges:true ` +
+      PROXY_IMAGE,
   );
+
+  // Clean up env file immediately (container already read it)
+  try { fs.unlinkSync(envFilePath); } catch { /* ignore */ }
 
   // Connect proxy to sandbox so agent containers can reach it
   await dockerExec(
@@ -103,5 +120,7 @@ export async function stopProxy(): Promise<void> {
   try {
     await dockerExec(`stop ${PROXY_CONTAINER_NAME}`);
     logger.info('Credential proxy sidecar stopped');
-  } catch { /* may not be running */ }
+  } catch {
+    /* may not be running */
+  }
 }

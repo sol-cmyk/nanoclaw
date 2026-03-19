@@ -7,11 +7,11 @@
  * Env vars:
  *   ANTHROPIC_API_KEY  — injected into every proxied request
  *   PROXY_PORT         — listen port (default 3001)
- *   UPSTREAM_URL       — Anthropic API base (default https://api.anthropic.com)
+ *
+ * Upstream is hardcoded to https://api.anthropic.com (not configurable).
  */
 import { createServer } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { request as httpRequest } from "node:http";
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 if (!API_KEY) {
@@ -20,16 +20,15 @@ if (!API_KEY) {
 }
 
 const PORT = parseInt(process.env.PROXY_PORT || "3001", 10);
-const UPSTREAM = new URL(process.env.UPSTREAM_URL || "https://api.anthropic.com");
-const isHttps = UPSTREAM.protocol === "https:";
-const makeRequest = isHttps ? httpsRequest : httpRequest;
+const UPSTREAM_HOST = "api.anthropic.com";
+const UPSTREAM_PORT = 443;
 
 const server = createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
     const body = Buffer.concat(chunks);
-    const headers = { ...req.headers, host: UPSTREAM.host, "content-length": body.length };
+    const headers = { ...req.headers, host: UPSTREAM_HOST, "content-length": body.length };
 
     // Strip hop-by-hop headers
     delete headers.connection;
@@ -40,10 +39,10 @@ const server = createServer((req, res) => {
     delete headers["x-api-key"];
     headers["x-api-key"] = API_KEY;
 
-    const upstream = makeRequest(
+    const upstream = httpsRequest(
       {
-        hostname: UPSTREAM.hostname,
-        port: UPSTREAM.port || (isHttps ? 443 : 80),
+        hostname: UPSTREAM_HOST,
+        port: UPSTREAM_PORT,
         path: req.url,
         method: req.method,
         headers,
@@ -68,7 +67,7 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Credential proxy listening on 0.0.0.0:${PORT} -> ${UPSTREAM.origin}`);
+  console.log(`Credential proxy listening on 0.0.0.0:${PORT} -> https://${UPSTREAM_HOST}`);
 });
 
 process.on("SIGTERM", () => {
