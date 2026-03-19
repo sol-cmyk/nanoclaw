@@ -119,13 +119,17 @@ function buildVolumeMounts(
   }
 
   // Per-group Claude sessions directory (isolated from other groups)
-  // Each group gets their own .claude/ to prevent cross-group session access
+  // Ephemeral: wiped on every container start to prevent cross-run state
+  // poisoning. Only settings.json and skills/ are seeded from host.
   const groupSessionsDir = path.join(
     DATA_DIR,
     'sessions',
     group.folder,
     '.claude',
   );
+  if (fs.existsSync(groupSessionsDir)) {
+    fs.rmSync(groupSessionsDir, { recursive: true });
+  }
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   // Always regenerate settings from host config (settings.json is mounted
@@ -329,6 +333,10 @@ function buildContainerArgs(
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
+
+  // Inject unique run ID for audit trail and idempotent writes
+  const runId = `${containerName}-${Date.now()}`;
+  args.push('-e', `SDR_RUN_ID=${runId}`);
 
   // Network isolation: container runs on internal sandbox network.
   // Can only reach the proxy sidecar (same network), not the internet.
