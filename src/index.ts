@@ -478,6 +478,13 @@ async function main(): Promise<void> {
   restoreRemoteControl();
 
   // Start credential proxy (containers route API calls through this)
+  // Sidecar mode: proxy runs in its own container with internet access.
+  // Agent containers run on an internal network and can only reach the proxy.
+  const { ensureNetworks, ensureProxyRunning, stopProxy } = await import('./network-isolation.js');
+  await ensureNetworks();
+  await ensureProxyRunning();
+
+  // Also start the host-side proxy for non-containerized use (e.g. claude -p tests)
   const proxyServer = await startCredentialProxy(
     CREDENTIAL_PROXY_PORT,
     PROXY_BIND_HOST,
@@ -487,6 +494,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
+    await stopProxy();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);

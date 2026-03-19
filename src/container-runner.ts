@@ -27,6 +27,11 @@ import {
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
+import {
+  PROXY_CONTAINER_NAME,
+  PROXY_PORT,
+  SANDBOX_NETWORK,
+} from './network-isolation.js';
 import { RegisteredGroup } from './types.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
@@ -176,10 +181,20 @@ function buildVolumeMounts(
   // Merge group-specific container config (e.g. additional env vars).
   // Deep-merge permissions to prevent group config from wiping the base deny/denyRead rules.
   if (group.containerConfig?.settings) {
-    const groupSettings = group.containerConfig.settings as Record<string, unknown>;
+    const groupSettings = group.containerConfig.settings as Record<
+      string,
+      unknown
+    >;
     for (const [key, value] of Object.entries(groupSettings)) {
-      if (key === 'permissions' && typeof value === 'object' && value !== null) {
-        const basePerms = containerSettings.permissions as Record<string, unknown>;
+      if (
+        key === 'permissions' &&
+        typeof value === 'object' &&
+        value !== null
+      ) {
+        const basePerms = containerSettings.permissions as Record<
+          string,
+          unknown
+        >;
         const groupPerms = value as Record<string, unknown>;
         for (const [permKey, permValue] of Object.entries(groupPerms)) {
           if (Array.isArray(permValue) && Array.isArray(basePerms[permKey])) {
@@ -306,16 +321,14 @@ function buildContainerArgs(
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
-  // Route API traffic through the credential proxy (containers never see real secrets)
-  args.push(
-    '-e',
-    `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
-  );
+  // Network isolation: container runs on internal sandbox network.
+  // Can only reach the proxy sidecar (same network), not the internet.
+  args.push('--network', SANDBOX_NETWORK);
 
-  // Mirror the host's auth method with a placeholder value.
-  // API key mode: SDK sends x-api-key, proxy replaces with real key.
-  // OAuth mode:   SDK exchanges placeholder token for temp API key,
-  //               proxy injects real OAuth token on that exchange request.
+  // Route API traffic through the proxy sidecar (by container name on sandbox network)
+  args.push('-e', `ANTHROPIC_BASE_URL=http://${PROXY_CONTAINER_NAME}:${PROXY_PORT}`);
+
+  // Placeholder API key — the proxy injects the real one
   const authMode = detectAuthMode();
   if (authMode === 'api-key') {
     args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
@@ -323,8 +336,7 @@ function buildContainerArgs(
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
 
-  // Runtime-specific args for host gateway resolution
-  args.push(...hostGatewayArgs());
+  // Host gateway args no longer needed — containers reach proxy by name, not host IP
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
