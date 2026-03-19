@@ -84,9 +84,13 @@ export async function ensureProxyRunning(): Promise<void> {
 
   // Write a temporary env file for the proxy (avoids secret in docker run args / docker inspect)
   const envFilePath = path.join(os.tmpdir(), '.nanoclaw-proxy-env');
-  fs.writeFileSync(envFilePath, `ANTHROPIC_API_KEY=${secrets.ANTHROPIC_API_KEY}\n`, {
-    mode: 0o600,
-  });
+  fs.writeFileSync(
+    envFilePath,
+    `ANTHROPIC_API_KEY=${secrets.ANTHROPIC_API_KEY}\n`,
+    {
+      mode: 0o600,
+    },
+  );
 
   // Start proxy on egress network
   // --user 65534:65534 = nobody (non-root, matches Dockerfile USER proxyuser fallback)
@@ -103,7 +107,11 @@ export async function ensureProxyRunning(): Promise<void> {
   );
 
   // Clean up env file immediately (container already read it)
-  try { fs.unlinkSync(envFilePath); } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(envFilePath);
+  } catch {
+    /* ignore */
+  }
 
   // Connect proxy to sandbox so agent containers can reach it
   await dockerExec(

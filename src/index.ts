@@ -480,7 +480,8 @@ async function main(): Promise<void> {
   // Start credential proxy (containers route API calls through this)
   // Sidecar mode: proxy runs in its own container with internet access.
   // Agent containers run on an internal network and can only reach the proxy.
-  const { ensureNetworks, ensureProxyRunning, stopProxy } = await import('./network-isolation.js');
+  const { ensureNetworks, ensureProxyRunning, stopProxy } =
+    await import('./network-isolation.js');
   await ensureNetworks();
   await ensureProxyRunning();
 

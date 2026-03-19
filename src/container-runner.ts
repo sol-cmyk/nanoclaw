@@ -326,7 +326,10 @@ function buildContainerArgs(
   args.push('--network', SANDBOX_NETWORK);
 
   // Route API traffic through the proxy sidecar (by container name on sandbox network)
-  args.push('-e', `ANTHROPIC_BASE_URL=http://${PROXY_CONTAINER_NAME}:${PROXY_PORT}`);
+  args.push(
+    '-e',
+    `ANTHROPIC_BASE_URL=http://${PROXY_CONTAINER_NAME}:${PROXY_PORT}`,
+  );
 
   // Placeholder API key — the proxy injects the real one
   const authMode = detectAuthMode();
