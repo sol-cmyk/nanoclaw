@@ -173,9 +173,26 @@ function buildVolumeMounts(
     },
   };
 
-  // Merge group-specific container config (e.g. additional allowed MCP servers)
+  // Merge group-specific container config (e.g. additional env vars).
+  // Deep-merge permissions to prevent group config from wiping the base deny/denyRead rules.
   if (group.containerConfig?.settings) {
-    Object.assign(containerSettings, group.containerConfig.settings);
+    const groupSettings = group.containerConfig.settings as Record<string, unknown>;
+    for (const [key, value] of Object.entries(groupSettings)) {
+      if (key === 'permissions' && typeof value === 'object' && value !== null) {
+        const basePerms = containerSettings.permissions as Record<string, unknown>;
+        const groupPerms = value as Record<string, unknown>;
+        for (const [permKey, permValue] of Object.entries(groupPerms)) {
+          if (Array.isArray(permValue) && Array.isArray(basePerms[permKey])) {
+            // Append group rules to base rules (don't replace)
+            (basePerms[permKey] as unknown[]).push(...permValue);
+          } else {
+            basePerms[permKey] = permValue;
+          }
+        }
+      } else {
+        (containerSettings as Record<string, unknown>)[key] = value;
+      }
+    }
   }
 
   fs.writeFileSync(
