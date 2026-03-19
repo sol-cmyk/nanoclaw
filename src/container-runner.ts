@@ -134,7 +134,8 @@ function buildVolumeMounts(
     env: {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-      CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
+      // Disable persistent auto-memory to prevent cross-run state poisoning
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
     },
     permissions: {
       // Deny dangerous shell commands that could escape the container sandbox
@@ -216,8 +217,12 @@ function buildVolumeMounts(
   );
 
   // Sync skills from container/skills/ into each group's .claude/skills/
+  // Always prune and re-copy to prevent stale/removed skills from persisting
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
   const skillsDst = path.join(groupSessionsDir, 'skills');
+  if (fs.existsSync(skillsDst)) {
+    fs.rmSync(skillsDst, { recursive: true });
+  }
   if (fs.existsSync(skillsSrc)) {
     for (const skillDir of fs.readdirSync(skillsSrc)) {
       const srcDir = path.join(skillsSrc, skillDir);
@@ -279,7 +284,11 @@ function buildVolumeMounts(
     group.folder,
     'agent-runner-src',
   );
-  if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
+  // Always refresh from host source to prevent stale runner code after security fixes
+  if (fs.existsSync(agentRunnerSrc)) {
+    if (fs.existsSync(groupAgentRunnerDir)) {
+      fs.rmSync(groupAgentRunnerDir, { recursive: true });
+    }
     fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
   }
   mounts.push({
