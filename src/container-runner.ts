@@ -123,28 +123,65 @@ function buildVolumeMounts(
   );
   fs.mkdirSync(groupSessionsDir, { recursive: true });
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
-  if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(
-      settingsFile,
-      JSON.stringify(
-        {
-          env: {
-            // Enable agent swarms (subagent orchestration)
-            // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            // Load CLAUDE.md from additional mounted directories
-            // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-            // Enable Claude's memory feature (persists user preferences between sessions)
-            // https://code.claude.com/docs/en/memory#manage-auto-memory
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-          },
-        },
-        null,
-        2,
-      ) + '\n',
-    );
+  // Always regenerate settings from host config (settings.json is mounted
+  // read-only so the agent cannot modify it; the host is authoritative).
+  const containerSettings: Record<string, unknown> = {
+    env: {
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+      CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
+    },
+    permissions: {
+      // Deny dangerous shell commands that could escape the container sandbox
+      deny: [
+        'Bash(curl *)',
+        'Bash(wget *)',
+        'Bash(ssh *)',
+        'Bash(scp *)',
+        'Bash(nc *)',
+        'Bash(ncat *)',
+        'Bash(netcat *)',
+        'Bash(ftp *)',
+        'Bash(python3 -m http.server*)',
+        'Bash(python -m http.server*)',
+        'Bash(chmod *)',
+        'Bash(chown *)',
+        'Bash(mount *)',
+        'Bash(umount *)',
+        'Bash(apt *)',
+        'Bash(apt-get *)',
+        'Bash(dpkg *)',
+        'Bash(npm install *)',
+        'Bash(npx *)',
+        'Bash(pip install *)',
+        'Bash(pip3 install *)',
+      ],
+      // Block reading sensitive paths inside the container
+      denyRead: [
+        '.env',
+        '*.env',
+        '.env.*',
+        '**/.env',
+        '**/*.pem',
+        '**/*.key',
+        '**/credentials*',
+        '**/secrets*',
+        '/etc/shadow',
+        '/etc/passwd',
+        '/proc/*/environ',
+      ],
+    },
+  };
+
+  // Merge group-specific container config (e.g. additional allowed MCP servers)
+  if (group.containerConfig?.settings) {
+    Object.assign(containerSettings, group.containerConfig.settings);
   }
+
+  fs.writeFileSync(
+    settingsFile,
+    JSON.stringify(containerSettings, null, 2) + '\n',
+  );
 
   // Sync skills from container/skills/ into each group's .claude/skills/
   const skillsSrc = path.join(process.cwd(), 'container', 'skills');
@@ -163,6 +200,24 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Protect settings.json from agent modification: overlay as read-only.
+  if (fs.existsSync(settingsFile)) {
+    mounts.push({
+      hostPath: settingsFile,
+      containerPath: '/home/node/.claude/settings.json',
+      readonly: true,
+    });
+  }
+
+  // Protect skills directory from agent modification: overlay as read-only.
+  if (fs.existsSync(skillsDst)) {
+    mounts.push({
+      hostPath: skillsDst,
+      containerPath: '/home/node/.claude/skills',
+      readonly: true,
+    });
+  }
+
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
@@ -175,9 +230,11 @@ function buildVolumeMounts(
     readonly: false,
   });
 
-  // Copy agent-runner source into a per-group writable location so agents
-  // can customize it (add tools, change behavior) without affecting other
-  // groups. Recompiled on container startup via entrypoint.sh.
+  // Copy agent-runner source into a per-group location so agents
+  // can have customized tools per group. Recompiled on container startup
+  // via entrypoint.sh (reads /app/src, writes to /tmp/dist).
+  // Mounted read-only: the entrypoint only reads from src during compilation.
+  // This prevents the agent from modifying its own runner source code.
   const agentRunnerSrc = path.join(
     projectRoot,
     'container',
@@ -196,7 +253,7 @@ function buildVolumeMounts(
   mounts.push({
     hostPath: groupAgentRunnerDir,
     containerPath: '/app/src',
-    readonly: false,
+    readonly: true,
   });
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
@@ -217,6 +274,17 @@ function buildContainerArgs(
   containerName: string,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
+
+  // Security hardening: drop all Linux capabilities, prevent privilege escalation,
+  // read-only root filesystem, writable scratch via tmpfs
+  args.push('--cap-drop=ALL');
+  args.push('--security-opt=no-new-privileges:true');
+  // Note: --read-only omitted. Claude Agent SDK (via claude subprocess) needs
+  // to write to paths outside /tmp (session state, caches). The security boundary
+  // is: cap-drop=ALL, no-new-privileges, non-root user, and the bind mounts
+  // (project read-only, .env shadowed, /app/src read-only).
+  args.push('--tmpfs', '/tmp:rw,nosuid,size=256m');
+  args.push('--tmpfs', '/run:rw,noexec,nosuid,size=64m');
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
