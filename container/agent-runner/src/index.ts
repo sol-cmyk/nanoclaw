@@ -400,8 +400,23 @@ async function runQuery(
         ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
         : undefined,
       allowedTools: [
-        'TodoWrite', 'ToolSearch', 'Skill',
-        'mcp__nanoclaw__*',
+        'TodoWrite',
+        // nanoclaw IPC tools (8)
+        'mcp__nanoclaw__send_message',
+        'mcp__nanoclaw__schedule_task',
+        'mcp__nanoclaw__list_tasks',
+        'mcp__nanoclaw__pause_task',
+        'mcp__nanoclaw__resume_task',
+        'mcp__nanoclaw__cancel_task',
+        'mcp__nanoclaw__update_task',
+        'mcp__nanoclaw__register_group',
+        // flarion-sdr tools (6)
+        'mcp__flarion-sdr__get_account_score',
+        'mcp__flarion-sdr__get_best_contacts',
+        'mcp__flarion-sdr__get_timing_signals',
+        'mcp__flarion-sdr__get_recent_outreach',
+        'mcp__flarion-sdr__enrich_contact',
+        'mcp__flarion-sdr__log_outreach',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
