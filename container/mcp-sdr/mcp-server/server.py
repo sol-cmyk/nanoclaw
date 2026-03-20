@@ -198,7 +198,7 @@ def get_timing_signals(account_id: str, limit: int = 5) -> TimingSignalsResult:
 def get_recent_outreach(account_id: str, limit: int = 10) -> RecentOutreachResult:
     """Return recent outreach rows from Airtable for a single account.
 
-    Requires Airtable credentials and an interactions table in SDR_SECRETS.
+    Reads from the SDR Outreach table via the Airtable sidecar proxy.
     """
     svc = services()
     account = svc.resolver.resolve_account(account_id)
@@ -215,10 +215,7 @@ def get_recent_outreach(account_id: str, limit: int = 10) -> RecentOutreachResul
 
 @mcp.tool()
 def enrich_contact(crm_contact_id: str) -> EnrichmentResult:
-    """Return cached Clay enrichment for one contact. Read-only: does NOT trigger Clay webhook.
-
-    Clay webhook queueing is a host-side action (not available to the agent).
-    """
+    """Return cached enrichment data for one contact. Read-only cache lookup."""
     svc = services()
     contact = svc.resolver.resolve_contact(crm_contact_id)
     cache_record: dict[str, Any] | None = None
@@ -227,12 +224,11 @@ def enrich_contact(crm_contact_id: str) -> EnrichmentResult:
             if svc.resolver.contact_record_matches(record, contact):
                 cache_record = safe_preview(record)
                 break
-    # Read-only: return cache hit/miss status, never queue Clay webhook
     notes: list[str] = []
     if cache_record:
-        notes.append("used Clay cache")
+        notes.append("found in enrichment cache")
     else:
-        notes.append("not found in Clay cache (webhook queueing is host-only)")
+        notes.append("not found in enrichment cache")
     return EnrichmentResult(
         contact=contact,
         found_in_cache=bool(cache_record),
