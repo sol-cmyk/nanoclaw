@@ -42,6 +42,9 @@ COPY agent-runner/package*.json ./
 # Install dependencies
 RUN npm install
 
+# Copy stdio-bridge for MCP sidecar communication
+COPY stdio-bridge.js /app/stdio-bridge.js
+
 # Copy source code
 COPY agent-runner/ ./
 
