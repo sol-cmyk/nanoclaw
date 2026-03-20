@@ -305,7 +305,8 @@ function buildVolumeMounts(
   // The MCP server runs inside the container as a stdio subprocess of Claude SDK.
   // This keeps data files and secrets inside the container boundary instead of the host.
   const mcpSdrDir = path.resolve(
-    process.env.MCP_SDR_DIR || path.join(process.cwd(), '..', 'cockpit', '.scripts', 'mcp-sdr'),
+    process.env.MCP_SDR_DIR ||
+      path.join(process.cwd(), '..', 'cockpit', '.scripts', 'mcp-sdr'),
   );
   if (fs.existsSync(mcpSdrDir)) {
     mounts.push({
@@ -316,14 +317,27 @@ function buildVolumeMounts(
   }
 
   // Data files for MCP server (read-only)
-  const dataDir = process.env.MCP_DATA_DIR || path.join(process.cwd(), '..', 'cockpit');
+  const dataDir =
+    process.env.MCP_DATA_DIR || path.join(process.cwd(), '..', 'cockpit');
   const dataMounts: Array<[string, string]> = [
     [path.join(dataDir, '.state', 'de-scorer'), '/workspace/data/de-scorer'],
     [path.join(dataDir, 'flarion', 'crm'), '/workspace/data/crm'],
-    [path.join(dataDir, '.state', 'persons.csv'), '/workspace/data/persons.csv'],
-    [path.join(dataDir, '.state', 'signal-promotions.jsonl'), '/workspace/data/signals.jsonl'],
-    [path.join(dataDir, '.state', 'clay-enriched-profiles.jsonl'), '/workspace/data/clay-profiles.jsonl'],
-    [path.join(dataDir, '.secrets', 'sdr.json'), '/workspace/data/sdr-secrets.json'],
+    [
+      path.join(dataDir, '.state', 'persons.csv'),
+      '/workspace/data/persons.csv',
+    ],
+    [
+      path.join(dataDir, '.state', 'signal-promotions.jsonl'),
+      '/workspace/data/signals.jsonl',
+    ],
+    [
+      path.join(dataDir, '.state', 'clay-enriched-profiles.jsonl'),
+      '/workspace/data/clay-profiles.jsonl',
+    ],
+    [
+      path.join(dataDir, '.secrets', 'sdr.json'),
+      '/workspace/data/sdr-secrets.json',
+    ],
   ];
   for (const [hostPath, containerPath] of dataMounts) {
     if (fs.existsSync(hostPath)) {

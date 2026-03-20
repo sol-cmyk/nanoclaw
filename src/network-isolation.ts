@@ -105,7 +105,11 @@ export async function ensureProxyRunning(): Promise<void> {
     );
   } finally {
     // Always clean up env file, even on failure
-    try { fs.unlinkSync(envFilePath); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(envFilePath);
+    } catch {
+      /* ignore */
+    }
   }
 
   // Connect proxy to sandbox so agent containers can reach it
