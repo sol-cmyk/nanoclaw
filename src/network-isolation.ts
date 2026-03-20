@@ -82,35 +82,30 @@ export async function ensureProxyRunning(): Promise<void> {
     throw new Error('ANTHROPIC_API_KEY not found in .env — cannot start proxy');
   }
 
-  // Write a temporary env file for the proxy (avoids secret in docker run args / docker inspect)
+  // Write a temporary env file for the proxy (avoids secret in docker run args)
   const envFilePath = path.join(os.tmpdir(), '.nanoclaw-proxy-env');
-  fs.writeFileSync(
-    envFilePath,
-    `ANTHROPIC_API_KEY=${secrets.ANTHROPIC_API_KEY}\n`,
-    {
-      mode: 0o600,
-    },
-  );
-
-  // Start proxy on egress network
-  // --user 65534:65534 = nobody (non-root, matches Dockerfile USER proxyuser fallback)
-  await dockerExec(
-    `run -d --rm ` +
-      `--name ${PROXY_CONTAINER_NAME} ` +
-      `--network ${EGRESS_NETWORK} ` +
-      `--env-file ${envFilePath} ` +
-      `--user 9999:9999 ` +
-      `--read-only ` +
-      `--cap-drop=ALL ` +
-      `--security-opt=no-new-privileges:true ` +
-      PROXY_IMAGE,
-  );
-
-  // Clean up env file immediately (container already read it)
   try {
-    fs.unlinkSync(envFilePath);
-  } catch {
-    /* ignore */
+    fs.writeFileSync(
+      envFilePath,
+      `ANTHROPIC_API_KEY=${secrets.ANTHROPIC_API_KEY}\n`,
+      { mode: 0o600 },
+    );
+
+    // Start proxy on egress network
+    await dockerExec(
+      `run -d --rm ` +
+        `--name ${PROXY_CONTAINER_NAME} ` +
+        `--network ${EGRESS_NETWORK} ` +
+        `--env-file ${envFilePath} ` +
+        `--user 9999:9999 ` +
+        `--read-only ` +
+        `--cap-drop=ALL ` +
+        `--security-opt=no-new-privileges:true ` +
+        PROXY_IMAGE,
+    );
+  } finally {
+    // Always clean up env file, even on failure
+    try { fs.unlinkSync(envFilePath); } catch { /* ignore */ }
   }
 
   // Connect proxy to sandbox so agent containers can reach it

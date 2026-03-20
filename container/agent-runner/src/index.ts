@@ -407,7 +407,8 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__flarion-sdr__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -421,6 +422,19 @@ async function runQuery(
             NANOCLAW_CHAT_JID: containerInput.chatJid,
             NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+          },
+        },
+        'flarion-sdr': {
+          command: 'python3',
+          args: ['/workspace/mcp-sdr/server.py'],
+          env: {
+            SCORER_DIR: '/workspace/data/de-scorer',
+            CRM_DIR: '/workspace/data/crm',
+            ECOSYSTEM_PEOPLE_FILE: '/workspace/data/persons.csv',
+            SIGNALS_FILE: '/workspace/data/signals.jsonl',
+            CLAY_PROFILES: '/workspace/data/clay-profiles.jsonl',
+            SDR_SECRETS: '/workspace/data/sdr-secrets.json',
+            SDR_RUN_ID: process.env.SDR_RUN_ID || '',
           },
         },
       },
