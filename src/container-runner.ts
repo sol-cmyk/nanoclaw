@@ -5,6 +5,7 @@
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { promisify } from 'util';
 
 import {
   CONTAINER_IMAGE,
@@ -28,9 +29,10 @@ import {
 import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import {
-  PROXY_CONTAINER_NAME,
-  PROXY_PORT,
-  SANDBOX_NETWORK,
+  AGENT_EGRESS_NETWORK,
+  ANTHROPIC_PROXY_CONTAINER_NAME,
+  ANTHROPIC_PROXY_PORT,
+  CONTROL_NETWORK,
 } from './network-isolation.js';
 import { RegisteredGroup } from './types.js';
 
@@ -347,14 +349,15 @@ function buildContainerArgs(
   const runId = `${containerName}-${Date.now()}`;
   args.push('-e', `SDR_RUN_ID=${runId}`);
 
-  // Network isolation: container runs on internal sandbox network.
-  // Can only reach the proxy sidecar (same network), not the internet.
-  args.push('--network', SANDBOX_NETWORK);
+  // Network isolation: agent starts on control network (for MCP sidecar),
+  // then gets connected to agent-egress network (for Anthropic proxy) after start.
+  // Agent cannot reach Airtable proxy (no shared network).
+  args.push('--network', CONTROL_NETWORK);
 
-  // Route API traffic through the proxy sidecar (by container name on sandbox network)
+  // Route API traffic through the Anthropic proxy (reachable via agent-egress network)
   args.push(
     '-e',
-    `ANTHROPIC_BASE_URL=http://${PROXY_CONTAINER_NAME}:${PROXY_PORT}`,
+    `ANTHROPIC_BASE_URL=http://${ANTHROPIC_PROXY_CONTAINER_NAME}:${ANTHROPIC_PROXY_PORT}`,
   );
 
   // Placeholder API key — the proxy injects the real one
@@ -438,6 +441,19 @@ export async function runContainerAgent(
     });
 
     onProcess(container, containerName);
+
+    // Connect agent to agent-egress network (for Anthropic proxy access).
+    // Agent starts on control network (for MCP), needs agent-egress for API calls.
+    const execP = promisify(exec);
+    execP(
+      `${CONTAINER_RUNTIME_BIN} network connect ${AGENT_EGRESS_NETWORK} ${containerName}`,
+      { timeout: 15000 },
+    ).catch((err) => {
+      logger.warn(
+        { containerName, err },
+        'Failed to connect agent to agent-egress network',
+      );
+    });
 
     let stdout = '';
     let stderr = '';
