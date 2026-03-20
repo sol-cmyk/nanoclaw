@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from clients import AirtableClient, ClayClient
+from clients import AirtableClient
 from config import ConfigError, Settings, load_settings
 from data import (
     ACCOUNT_ID_KEYS,
@@ -63,7 +64,6 @@ class ServiceContainer:
             clay_profiles=settings.clay_profiles,
         )
         self.airtable = AirtableClient(settings) if settings.has_airtable else None
-        self.clay = ClayClient(settings)
 
 
 _services: ServiceContainer | None = None
@@ -256,6 +256,8 @@ def log_outreach(payload: dict[str, Any]) -> LogOutreachResult:
     validated = LogOutreachPayload.model_validate(payload)
     # Always overwrite run_id from host env (agent cannot choose its own audit key)
     validated.run_id = os.environ.get("SDR_RUN_ID")
+    # Server-side timestamp — agent cannot control when a record was logged
+    validated.logged_at = datetime.now(timezone.utc).isoformat()
     # Strip host-only fields the agent should not set
     validated.approved_by = None
     validated.sent_at = None

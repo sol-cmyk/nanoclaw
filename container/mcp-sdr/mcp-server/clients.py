@@ -8,20 +8,18 @@ import httpx
 
 from config import Settings
 from data import match_key
-from models import EnrichmentResult, LogOutreachPayload, LogOutreachResult, OutreachRecord, ResolvedEntity
+from models import LogOutreachPayload, LogOutreachResult, OutreachRecord, ResolvedEntity
 
 
 class AirtableClient:
     def __init__(self, settings: Settings):
         self.settings = settings
         if not settings.has_airtable:
-            raise RuntimeError("Airtable credentials or table configuration are missing")
+            raise RuntimeError("Airtable configuration is missing")
+        # Route through the Airtable sidecar proxy — it injects the Bearer token
         self._client = httpx.Client(
-            base_url=f"https://api.airtable.com/v0/{settings.airtable_base_id}/",
-            headers={
-                "Authorization": f"Bearer {settings.airtable_token}",
-                "Content-Type": "application/json",
-            },
+            base_url=f"{settings.airtable_base_url}/v0/{settings.airtable_base_id}/",
+            headers={"Content-Type": "application/json"},
             timeout=20.0,
         )
 
@@ -57,7 +55,7 @@ class AirtableClient:
             formula = None
         params: dict[str, Any] = {
             "maxRecords": min(limit, self.settings.max_recent_outreach),
-            "sort[0][field]": self.settings.airtable_fields.get("sent_at", "sent_at"),
+            "sort[0][field]": self.settings.airtable_fields.get("logged_at", "logged_at"),
             "sort[0][direction]": "desc",
         }
         if formula:
@@ -81,6 +79,7 @@ class AirtableClient:
                     draft_text=None,
                     approved_by=fields.get(self.settings.airtable_fields.get("approved_by", "approved_by")),
                     sent_at=fields.get(self.settings.airtable_fields.get("sent_at", "sent_at")),
+                    logged_at=fields.get(self.settings.airtable_fields.get("logged_at", "logged_at")),
                     notes=None,  # Notes may contain sensitive feedback
                     metadata={},  # Strip metadata from readback
                     raw_fields={},  # Never expose raw Airtable fields to agent
@@ -97,6 +96,8 @@ class AirtableClient:
             fields_map["account_match_key"]: match_key(payload.account_id),
             fields_map["status"]: payload.status.value,
         }
+        if payload.logged_at:
+            fields[fields_map["logged_at"]] = payload.logged_at
         if payload.run_id:
             fields["run_id"] = payload.run_id
         if payload.crm_contact_id:
@@ -203,42 +204,3 @@ class AirtableClient:
             except json.JSONDecodeError:
                 return {"raw": value}
         return {}
-
-
-class ClayClient:
-    def __init__(self, settings: Settings):
-        self.settings = settings
-
-    def enrich_contact(self, contact: ResolvedEntity, cache_record: dict[str, Any] | None) -> EnrichmentResult:
-        notes: list[str] = []
-        found_in_cache = bool(cache_record)
-        queue_response: dict[str, Any] = {}
-        queued_with_clay = False
-
-        if found_in_cache:
-            notes.append("used Clay cache")
-
-        if not found_in_cache and self.settings.has_clay_webhook:
-            payload = {
-                "crm_contact_id": contact.id,
-                "contact_ref": contact.ref,
-                "name": contact.name,
-                "aliases": contact.aliases,
-                "source": "nanoclaw-sdr-mcp",
-            }
-            response = httpx.post(self.settings.clay_webhook_url, json=payload, timeout=20.0)
-            response.raise_for_status()
-            queue_response = response.json() if response.headers.get("content-type", "").startswith("application/json") else {"status": response.status_code}
-            queued_with_clay = True
-            notes.append("queued Clay enrichment")
-        elif not found_in_cache:
-            notes.append("Clay webhook not configured")
-
-        return EnrichmentResult(
-            contact=contact,
-            found_in_cache=found_in_cache,
-            queued_with_clay=queued_with_clay,
-            cache_record=cache_record or {},
-            queue_response=queue_response,
-            notes=notes,
-        )

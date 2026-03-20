@@ -72,6 +72,7 @@ class OutreachRecord(BaseModel):
     draft_text: str | None = None
     approved_by: str | None = None
     sent_at: str | None = None
+    logged_at: str | None = None
     notes: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     raw_fields: dict[str, Any] = Field(default_factory=dict)
@@ -113,6 +114,7 @@ class LogOutreachPayload(BaseModel, extra="forbid"):
     draft_text: str | None = None
     approved_by: str | None = None
     sent_at: str | None = None
+    logged_at: str | None = None
     notes: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
