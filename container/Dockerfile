@@ -3,7 +3,7 @@
 
 FROM node:22-slim
 
-# Install system dependencies for Chromium + Python pip for MCP server
+# Install system dependencies for Chromium
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -24,11 +24,7 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
-    python3-pip \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Python MCP server dependencies (for flarion-sdr MCP tools)
-RUN pip3 install --no-cache-dir --break-system-packages pydantic httpx "mcp[cli]"
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -52,8 +48,8 @@ COPY agent-runner/ ./
 # Build TypeScript
 RUN npm run build
 
-# Create workspace directories + MCP server mount point
-RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input /workspace/mcp-sdr /workspace/data
+# Create workspace directories
+RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
 
 # Create entrypoint script
 # Container input (prompt, group info) is passed via stdin JSON.

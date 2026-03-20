@@ -301,49 +301,11 @@ function buildVolumeMounts(
     readonly: true,
   });
 
-  // Mount flarion-sdr MCP server code + data files (read-only)
-  // The MCP server runs inside the container as a stdio subprocess of Claude SDK.
-  // This keeps data files and secrets inside the container boundary instead of the host.
-  const mcpSdrDir = path.resolve(
-    process.env.MCP_SDR_DIR ||
-      path.join(process.cwd(), '..', 'cockpit', '.scripts', 'mcp-sdr'),
-  );
-  if (fs.existsSync(mcpSdrDir)) {
-    mounts.push({
-      hostPath: mcpSdrDir,
-      containerPath: '/workspace/mcp-sdr',
-      readonly: true,
-    });
-  }
-
-  // Data files for MCP server (read-only)
-  const dataDir =
-    process.env.MCP_DATA_DIR || path.join(process.cwd(), '..', 'cockpit');
-  const dataMounts: Array<[string, string]> = [
-    [path.join(dataDir, '.state', 'de-scorer'), '/workspace/data/de-scorer'],
-    [path.join(dataDir, 'flarion', 'crm'), '/workspace/data/crm'],
-    [
-      path.join(dataDir, '.state', 'persons.csv'),
-      '/workspace/data/persons.csv',
-    ],
-    [
-      path.join(dataDir, '.state', 'signal-promotions.jsonl'),
-      '/workspace/data/signals.jsonl',
-    ],
-    [
-      path.join(dataDir, '.state', 'clay-enriched-profiles.jsonl'),
-      '/workspace/data/clay-profiles.jsonl',
-    ],
-    [
-      path.join(dataDir, '.secrets', 'sdr.json'),
-      '/workspace/data/sdr-secrets.json',
-    ],
-  ];
-  for (const [hostPath, containerPath] of dataMounts) {
-    if (fs.existsSync(hostPath)) {
-      mounts.push({ hostPath, containerPath, readonly: true });
-    }
-  }
+  // MCP server runs on the HOST (not in this container).
+  // The agent accesses MCP tools via .mcp.json at the project root.
+  // No data files or secrets are mounted into the agent container.
+  // This is Option A: host is the trust boundary.
+  // Option C (full sidecar architecture) is the production answer.
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
@@ -384,14 +346,6 @@ function buildContainerArgs(
   // Inject unique run ID for audit trail and idempotent writes
   const runId = `${containerName}-${Date.now()}`;
   args.push('-e', `SDR_RUN_ID=${runId}`);
-
-  // MCP server env vars (container paths for data files)
-  args.push('-e', 'SCORER_DIR=/workspace/data/de-scorer');
-  args.push('-e', 'CRM_DIR=/workspace/data/crm');
-  args.push('-e', 'ECOSYSTEM_PEOPLE_FILE=/workspace/data/persons.csv');
-  args.push('-e', 'SIGNALS_FILE=/workspace/data/signals.jsonl');
-  args.push('-e', 'CLAY_PROFILES=/workspace/data/clay-profiles.jsonl');
-  args.push('-e', 'SDR_SECRETS=/workspace/data/sdr-secrets.json');
 
   // Network isolation: container runs on internal sandbox network.
   // Can only reach the proxy sidecar (same network), not the internet.
