@@ -468,11 +468,27 @@ export async function runContainerAgent(
     // Agent starts on control network (for MCP), needs agent-egress for API calls.
     // IMPORTANT: must complete BEFORE writing stdin, otherwise the first Anthropic
     // call can race the network attach and fail with EHOSTUNREACH.
+    // Wait briefly for container to register in Docker, then retry on failure.
     const execP = promisify(exec);
-    execP(
-      `${CONTAINER_RUNTIME_BIN} network connect ${AGENT_EGRESS_NETWORK} ${containerName}`,
-      { timeout: 15000 },
-    )
+    const connectNetwork = async (retries = 3): Promise<void> => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          await execP(
+            `${CONTAINER_RUNTIME_BIN} network connect ${AGENT_EGRESS_NETWORK} ${containerName}`,
+            { timeout: 15000 },
+          );
+          return;
+        } catch (err) {
+          if (i < retries - 1) {
+            await new Promise((r) => setTimeout(r, 500));
+          } else {
+            throw err;
+          }
+        }
+      }
+    };
+
+    connectNetwork()
       .then(() => {
         logger.debug(
           { containerName },
@@ -484,7 +500,7 @@ export async function runContainerAgent(
       .catch((err) => {
         logger.error(
           { containerName, err },
-          'Failed to connect agent to agent-egress network, sending input anyway',
+          'Failed to connect agent to agent-egress network after retries, sending input anyway',
         );
         // Still send input so the container doesn't hang forever waiting on stdin
         container.stdin.write(JSON.stringify(input));

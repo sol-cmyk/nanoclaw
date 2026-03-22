@@ -289,46 +289,52 @@ export async function ensureMcpRunning(): Promise<void> {
     );
   }
 
-  // Env vars the MCP server's config.py expects (container /data/ paths)
-  const envArgs: string[] = [
-    '-e',
+  // Env vars the MCP server's config.py expects (container /data/ paths).
+  // Written to a temp env-file to avoid shell quoting issues with spaces in values.
+  const envLines = [
     'SCORER_DIR=/data/scorer',
-    '-e',
     'CRM_DIR=/data/crm',
-    '-e',
     'ECOSYSTEM_PEOPLE_FILE=/data/ecosystem-people.csv',
-    '-e',
     'SIGNALS_FILE=/data/signals.jsonl',
-    '-e',
     'CLAY_PROFILES=/data/clay-profiles.jsonl',
-    // Airtable via proxy: no token needed, proxy injects it
-    '-e',
     `AIRTABLE_BASE_URL=http://${AIRTABLE_PROXY_CONTAINER_NAME}:${AIRTABLE_PROXY_PORT}`,
   ];
   if (airtableBaseId) {
-    envArgs.push('-e', `AIRTABLE_BASE_ID=${airtableBaseId}`);
+    envLines.push(`AIRTABLE_BASE_ID=${airtableBaseId}`);
   }
-  envArgs.push('-e', `AIRTABLE_INTERACTIONS_TABLE=${airtableTable}`);
+  envLines.push(`AIRTABLE_INTERACTIONS_TABLE=${airtableTable}`);
 
-  // Start on CONTROL_NETWORK (agent can reach it), then connect to MCP_EGRESS_NETWORK
-  await dockerExec(
-    `run -d --rm ` +
-      `--name ${MCP_CONTAINER_NAME} ` +
-      `--network ${CONTROL_NETWORK} ` +
-      `--user 9999:9999 ` +
-      `--read-only ` +
-      `--cap-drop=ALL ` +
-      `--security-opt=no-new-privileges:true ` +
-      `--memory=512m ` +
-      `--cpus=1.0 ` +
-      `--pids-limit=128 ` +
-      `--tmpfs /tmp:rw,nosuid,size=64m ` +
-      envArgs.join(' ') +
-      ' ' +
-      mountArgs.join(' ') +
-      (mountArgs.length > 0 ? ' ' : '') +
-      MCP_IMAGE,
-  );
+  const mcpEnvFilePath = path.join(os.tmpdir(), '.nanoclaw-mcp-sdr-env');
+  try {
+    fs.writeFileSync(mcpEnvFilePath, envLines.join('\n') + '\n', {
+      mode: 0o600,
+    });
+
+    // Start on CONTROL_NETWORK (agent can reach it), then connect to MCP_EGRESS_NETWORK
+    await dockerExec(
+      `run -d --rm ` +
+        `--name ${MCP_CONTAINER_NAME} ` +
+        `--network ${CONTROL_NETWORK} ` +
+        `--env-file ${mcpEnvFilePath} ` +
+        `--user 9999:9999 ` +
+        `--read-only ` +
+        `--cap-drop=ALL ` +
+        `--security-opt=no-new-privileges:true ` +
+        `--memory=512m ` +
+        `--cpus=1.0 ` +
+        `--pids-limit=128 ` +
+        `--tmpfs /tmp:rw,nosuid,size=64m ` +
+        mountArgs.join(' ') +
+        (mountArgs.length > 0 ? ' ' : '') +
+        MCP_IMAGE,
+    );
+  } finally {
+    try {
+      fs.unlinkSync(mcpEnvFilePath);
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Connect to MCP egress network so sidecar can reach Airtable proxy
   await dockerExec(
