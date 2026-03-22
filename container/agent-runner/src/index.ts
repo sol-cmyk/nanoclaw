@@ -432,6 +432,17 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        'flarion-sdr': {
+          command: 'node',
+          args: ['/app/stdio-bridge.js'],
+          env: {
+            MCP_SDR_HOST: process.env.MCP_SDR_HOST || 'nanoclaw-mcp',
+            MCP_SDR_PORT: process.env.MCP_SDR_PORT || '9000',
+            SDR_RUN_ID: process.env.SDR_RUN_ID || '',
+            SDR_ACTOR_ID: process.env.SDR_ACTOR_ID || '',
+            SDR_CHANNEL: process.env.SDR_CHANNEL || '',
+          },
+        },
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],

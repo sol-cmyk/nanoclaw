@@ -33,6 +33,8 @@ import {
   ANTHROPIC_PROXY_CONTAINER_NAME,
   ANTHROPIC_PROXY_PORT,
   CONTROL_NETWORK,
+  MCP_CONTAINER_NAME,
+  MCP_PORT,
 } from './network-isolation.js';
 import { RegisteredGroup } from './types.js';
 
@@ -367,6 +369,10 @@ function buildContainerArgs(
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
+
+  // MCP SDR sidecar env vars — agent's stdio-bridge uses these to connect
+  args.push('-e', `MCP_SDR_HOST=${MCP_CONTAINER_NAME}`);
+  args.push('-e', `MCP_SDR_PORT=${MCP_PORT}`);
 
   // Host gateway args no longer needed — containers reach proxy by name, not host IP
 

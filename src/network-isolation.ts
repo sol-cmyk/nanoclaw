@@ -17,7 +17,8 @@ import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
-import { CONTAINER_RUNTIME_BIN } from './container-runtime.js';
+import { CONTAINER_RUNTIME_BIN, readonlyMountArgs } from './container-runtime.js';
+import { SDR_DATA_MOUNTS } from './config.js';
 import { logger } from './logger.js';
 import { readEnvFile } from './env.js';
 
@@ -39,6 +40,11 @@ export const ANTHROPIC_PROXY_PORT = 3001;
 export const AIRTABLE_PROXY_CONTAINER_NAME = 'nanoclaw-airtable-proxy';
 export const AIRTABLE_PROXY_IMAGE = 'nanoclaw-airtable-proxy:latest';
 export const AIRTABLE_PROXY_PORT = 3002;
+
+// --- MCP SDR sidecar ---
+export const MCP_CONTAINER_NAME = 'nanoclaw-mcp';
+export const MCP_IMAGE = 'nanoclaw-mcp-sdr:latest';
+export const MCP_PORT = 9000;
 
 async function dockerExec(cmd: string): Promise<string> {
   const { stdout } = await execAsync(`${docker} ${cmd}`, { timeout: 15000 });
@@ -63,10 +69,7 @@ async function containerRunning(name: string): Promise<boolean> {
   }
 }
 
-async function ensureNetwork(
-  name: string,
-  internal: boolean,
-): Promise<void> {
+async function ensureNetwork(name: string, internal: boolean): Promise<void> {
   if (await networkExists(name)) return;
   const internalFlag = internal ? ' --internal' : '';
   await dockerExec(`network create${internalFlag} ${name}`);
@@ -147,7 +150,9 @@ async function startProxy(opts: {
 export async function ensureAnthropicProxyRunning(): Promise<void> {
   const secrets = readEnvFile(['ANTHROPIC_API_KEY']);
   if (!secrets.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY not found in .env — cannot start Anthropic proxy');
+    throw new Error(
+      'ANTHROPIC_API_KEY not found in .env — cannot start Anthropic proxy',
+    );
   }
 
   await startProxy({
@@ -164,7 +169,9 @@ export async function ensureAnthropicProxyRunning(): Promise<void> {
 export async function ensureAirtableProxyRunning(): Promise<void> {
   const secrets = readEnvFile(['AIRTABLE_TOKEN']);
   if (!secrets.AIRTABLE_TOKEN) {
-    throw new Error('AIRTABLE_TOKEN not found in .env — cannot start Airtable proxy');
+    throw new Error(
+      'AIRTABLE_TOKEN not found in .env — cannot start Airtable proxy',
+    );
   }
 
   await startProxy({
@@ -193,6 +200,62 @@ export async function stopAnthropicProxy(): Promise<void> {
 
 export async function stopAirtableProxy(): Promise<void> {
   await stopContainerByName(AIRTABLE_PROXY_CONTAINER_NAME);
+}
+
+// --- MCP SDR sidecar lifecycle ---
+
+export async function ensureMcpRunning(): Promise<void> {
+  if (SDR_DATA_MOUNTS.length === 0) {
+    logger.warn(
+      'SDR data mounts not configured (set SDR_SCORER_DIR, SDR_CRM_DIR in .env) — skipping MCP sidecar',
+    );
+    return;
+  }
+
+  if (await containerRunning(MCP_CONTAINER_NAME)) {
+    logger.debug({ container: MCP_CONTAINER_NAME }, 'MCP sidecar already running');
+    return;
+  }
+
+  // Remove stale container if exists but not running
+  try {
+    await dockerExec(`rm -f ${MCP_CONTAINER_NAME}`);
+  } catch {
+    /* ignore */
+  }
+
+  // Build data mount args (all read-only)
+  const mountArgs: string[] = [];
+  for (const m of SDR_DATA_MOUNTS) {
+    mountArgs.push(...readonlyMountArgs(m.hostPath, m.containerPath));
+  }
+
+  // Start on CONTROL_NETWORK (agent can reach it), then connect to MCP_EGRESS_NETWORK
+  await dockerExec(
+    `run -d --rm ` +
+      `--name ${MCP_CONTAINER_NAME} ` +
+      `--network ${CONTROL_NETWORK} ` +
+      `--user 9999:9999 ` +
+      `--read-only ` +
+      `--cap-drop=ALL ` +
+      `--security-opt=no-new-privileges:true ` +
+      `--tmpfs /tmp:rw,nosuid,size=64m ` +
+      mountArgs.join(' ') +
+      (mountArgs.length > 0 ? ' ' : '') +
+      MCP_IMAGE,
+  );
+
+  // Connect to MCP egress network so sidecar can reach Airtable proxy
+  await dockerExec(`network connect ${MCP_EGRESS_NETWORK} ${MCP_CONTAINER_NAME}`);
+
+  logger.info(
+    { container: MCP_CONTAINER_NAME, port: MCP_PORT },
+    `MCP sidecar started (${CONTROL_NETWORK} + ${MCP_EGRESS_NETWORK})`,
+  );
+}
+
+export async function stopMcp(): Promise<void> {
+  await stopContainerByName(MCP_CONTAINER_NAME);
 }
 
 // --- Convenience wrappers ---

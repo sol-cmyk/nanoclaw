@@ -67,6 +67,46 @@ export const TRIGGER_PATTERN = new RegExp(
   'i',
 );
 
+// SDR MCP sidecar data mounts (host paths → container /data/)
+// Only starts MCP sidecar when at least SCORER_DIR and CRM_DIR are configured.
+const sdrEnv = readEnvFile([
+  'SDR_SCORER_DIR',
+  'SDR_CRM_DIR',
+  'SDR_ECOSYSTEM_PEOPLE_FILE',
+  'SDR_SIGNALS_FILE',
+  'SDR_CLAY_PROFILES',
+]);
+
+export interface SdrDataMount {
+  hostPath: string;
+  containerPath: string;
+}
+
+export const SDR_DATA_MOUNTS: SdrDataMount[] = (() => {
+  const mounts: SdrDataMount[] = [];
+  const scorerDir =
+    process.env.SDR_SCORER_DIR || sdrEnv.SDR_SCORER_DIR;
+  const crmDir = process.env.SDR_CRM_DIR || sdrEnv.SDR_CRM_DIR;
+  const ecosystemFile =
+    process.env.SDR_ECOSYSTEM_PEOPLE_FILE ||
+    sdrEnv.SDR_ECOSYSTEM_PEOPLE_FILE;
+  const signalsFile =
+    process.env.SDR_SIGNALS_FILE || sdrEnv.SDR_SIGNALS_FILE;
+  const clayProfiles =
+    process.env.SDR_CLAY_PROFILES || sdrEnv.SDR_CLAY_PROFILES;
+
+  if (scorerDir) mounts.push({ hostPath: scorerDir, containerPath: '/data/scorer' });
+  if (crmDir) mounts.push({ hostPath: crmDir, containerPath: '/data/crm' });
+  if (ecosystemFile)
+    mounts.push({ hostPath: ecosystemFile, containerPath: '/data/ecosystem-people.json' });
+  if (signalsFile)
+    mounts.push({ hostPath: signalsFile, containerPath: '/data/signals.json' });
+  if (clayProfiles)
+    mounts.push({ hostPath: clayProfiles, containerPath: '/data/clay-profiles.json' });
+
+  return mounts;
+})();
+
 // Timezone for scheduled tasks (cron expressions, etc.)
 // Uses system timezone by default
 export const TIMEZONE =
