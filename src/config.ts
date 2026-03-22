@@ -84,25 +84,32 @@ export interface SdrDataMount {
 
 export const SDR_DATA_MOUNTS: SdrDataMount[] = (() => {
   const mounts: SdrDataMount[] = [];
-  const scorerDir =
-    process.env.SDR_SCORER_DIR || sdrEnv.SDR_SCORER_DIR;
+  const scorerDir = process.env.SDR_SCORER_DIR || sdrEnv.SDR_SCORER_DIR;
   const crmDir = process.env.SDR_CRM_DIR || sdrEnv.SDR_CRM_DIR;
   const ecosystemFile =
-    process.env.SDR_ECOSYSTEM_PEOPLE_FILE ||
-    sdrEnv.SDR_ECOSYSTEM_PEOPLE_FILE;
-  const signalsFile =
-    process.env.SDR_SIGNALS_FILE || sdrEnv.SDR_SIGNALS_FILE;
+    process.env.SDR_ECOSYSTEM_PEOPLE_FILE || sdrEnv.SDR_ECOSYSTEM_PEOPLE_FILE;
+  const signalsFile = process.env.SDR_SIGNALS_FILE || sdrEnv.SDR_SIGNALS_FILE;
   const clayProfiles =
     process.env.SDR_CLAY_PROFILES || sdrEnv.SDR_CLAY_PROFILES;
 
-  if (scorerDir) mounts.push({ hostPath: scorerDir, containerPath: '/data/scorer' });
+  if (scorerDir)
+    mounts.push({ hostPath: scorerDir, containerPath: '/data/scorer' });
   if (crmDir) mounts.push({ hostPath: crmDir, containerPath: '/data/crm' });
   if (ecosystemFile)
-    mounts.push({ hostPath: ecosystemFile, containerPath: '/data/ecosystem-people.json' });
+    mounts.push({
+      hostPath: ecosystemFile,
+      containerPath: '/data/ecosystem-people.csv',
+    });
   if (signalsFile)
-    mounts.push({ hostPath: signalsFile, containerPath: '/data/signals.json' });
+    mounts.push({
+      hostPath: signalsFile,
+      containerPath: '/data/signals.jsonl',
+    });
   if (clayProfiles)
-    mounts.push({ hostPath: clayProfiles, containerPath: '/data/clay-profiles.json' });
+    mounts.push({
+      hostPath: clayProfiles,
+      containerPath: '/data/clay-profiles.jsonl',
+    });
 
   return mounts;
 })();

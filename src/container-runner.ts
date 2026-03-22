@@ -50,6 +50,10 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  /** Identity of the human who triggered this run (for SDR audit trail) */
+  actorId?: string;
+  /** Channel name where the request originated (for SDR audit trail) */
+  channelName?: string;
 }
 
 export interface ContainerOutput {
@@ -305,12 +309,6 @@ function buildVolumeMounts(
     readonly: true,
   });
 
-  // MCP server runs on the HOST (not in this container).
-  // The agent accesses MCP tools via .mcp.json at the project root.
-  // No data files or secrets are mounted into the agent container.
-  // This is Option A: host is the trust boundary.
-  // Option C (full sidecar architecture) is the production answer.
-
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
@@ -327,22 +325,25 @@ function buildVolumeMounts(
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  input: ContainerInput,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
   // Security hardening: drop all Linux capabilities, prevent privilege escalation,
-  // read-only root filesystem, writable scratch via tmpfs
+  // read-only root filesystem, writable scratch via targeted tmpfs
   args.push('--cap-drop=ALL');
   args.push('--security-opt=no-new-privileges:true');
   args.push('--memory=2g');
   args.push('--cpus=1.5');
   args.push('--pids-limit=256');
-  // Note: --read-only omitted. Claude Agent SDK (via claude subprocess) needs
-  // to write to paths outside /tmp (session state, caches). The security boundary
-  // is: cap-drop=ALL, no-new-privileges, non-root user, and the bind mounts
-  // (project read-only, .env shadowed, /app/src read-only).
+  args.push('--read-only');
+  // Targeted writable tmpfs for Claude Agent SDK write paths:
+  //   /tmp       — general scratch, subprocess temp files
+  //   /run       — runtime state
+  //   /home/node — SDK writes session state, .claude is seeded then overlaid read-only
   args.push('--tmpfs', '/tmp:rw,nosuid,size=256m');
   args.push('--tmpfs', '/run:rw,noexec,nosuid,size=64m');
+  args.push('--tmpfs', '/home/node:rw,nosuid,size=128m');
 
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
@@ -350,6 +351,11 @@ function buildContainerArgs(
   // Inject unique run ID for audit trail and idempotent writes
   const runId = `${containerName}-${Date.now()}`;
   args.push('-e', `SDR_RUN_ID=${runId}`);
+
+  // SDR bridge metadata: actor identity and channel for audit trail.
+  // The stdio-bridge sends these in the preface; the sidecar rejects empty values.
+  args.push('-e', `SDR_ACTOR_ID=${input.actorId || 'unknown'}`);
+  args.push('-e', `SDR_CHANNEL=${input.channelName || 'unknown'}`);
 
   // Network isolation: agent starts on control network (for MCP sidecar),
   // then gets connected to agent-egress network (for Anthropic proxy) after start.
@@ -413,7 +419,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  const containerArgs = buildContainerArgs(mounts, containerName, input);
 
   logger.debug(
     {
@@ -450,24 +456,32 @@ export async function runContainerAgent(
 
     // Connect agent to agent-egress network (for Anthropic proxy access).
     // Agent starts on control network (for MCP), needs agent-egress for API calls.
+    // IMPORTANT: must complete BEFORE writing stdin, otherwise the first Anthropic
+    // call can race the network attach and fail with EHOSTUNREACH.
     const execP = promisify(exec);
     execP(
       `${CONTAINER_RUNTIME_BIN} network connect ${AGENT_EGRESS_NETWORK} ${containerName}`,
       { timeout: 15000 },
-    ).catch((err) => {
-      logger.warn(
-        { containerName, err },
-        'Failed to connect agent to agent-egress network',
-      );
-    });
+    )
+      .then(() => {
+        logger.debug({ containerName }, 'Agent-egress network connected, sending input');
+        container.stdin.write(JSON.stringify(input));
+        container.stdin.end();
+      })
+      .catch((err) => {
+        logger.error(
+          { containerName, err },
+          'Failed to connect agent to agent-egress network, sending input anyway',
+        );
+        // Still send input so the container doesn't hang forever waiting on stdin
+        container.stdin.write(JSON.stringify(input));
+        container.stdin.end();
+      });
 
     let stdout = '';
     let stderr = '';
     let stdoutTruncated = false;
     let stderrTruncated = false;
-
-    container.stdin.write(JSON.stringify(input));
-    container.stdin.end();
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
     let parseBuffer = '';

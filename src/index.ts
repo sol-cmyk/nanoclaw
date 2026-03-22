@@ -3,13 +3,11 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
-  CREDENTIAL_PROXY_PORT,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
   TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
-import { startCredentialProxy } from './credential-proxy.js';
 import './channels/index.js';
 import {
   getChannelFactory,
@@ -24,7 +22,6 @@ import {
 import {
   cleanupOrphans,
   ensureContainerRuntimeRunning,
-  PROXY_BIND_HOST,
 } from './container-runtime.js';
 import {
   getAllChats,
@@ -212,6 +209,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let hadError = false;
   let outputSentToUser = false;
 
+  // Extract actor identity from the most recent non-bot message for SDR audit trail.
+  // Use sender (platform user ID) for stable audit, chatJid for channel identity.
+  const lastHumanMsg = [...missedMessages].reverse().find((m) => !m.is_bot_message && !m.is_from_me);
+  const actorId = lastHumanMsg?.sender || lastHumanMsg?.sender_name || 'unknown';
+  const channelId = chatJid;
+
   const output = await runAgent(group, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
     if (result.result) {
@@ -237,7 +240,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (result.status === 'error') {
       hadError = true;
     }
-  });
+  }, actorId, channelId);
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -270,6 +273,8 @@ async function runAgent(
   prompt: string,
   chatJid: string,
   onOutput?: (output: ContainerOutput) => Promise<void>,
+  actorId?: string,
+  channelName?: string,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = sessions[group.folder];
@@ -320,6 +325,8 @@ async function runAgent(
         chatJid,
         isMain,
         assistantName: ASSISTANT_NAME,
+        actorId,
+        channelName,
       },
       (proc, containerName) =>
         queue.registerProcess(chatJid, proc, containerName, group.folder),
@@ -480,22 +487,23 @@ async function main(): Promise<void> {
   // Start credential proxy (containers route API calls through this)
   // Sidecar mode: proxy runs in its own container with internet access.
   // Agent containers run on an internal network and can only reach the proxy.
-  const { ensureNetworks, ensureProxiesRunning, ensureMcpRunning, stopProxies, stopMcp } =
-    await import('./network-isolation.js');
+  const {
+    ensureNetworks,
+    ensureProxiesRunning,
+    ensureMcpRunning,
+    stopProxies,
+    stopMcp,
+  } = await import('./network-isolation.js');
   await ensureNetworks();
   await ensureProxiesRunning();
   await ensureMcpRunning();
 
-  // Also start the host-side proxy for non-containerized use (e.g. claude -p tests)
-  const proxyServer = await startCredentialProxy(
-    CREDENTIAL_PROXY_PORT,
-    PROXY_BIND_HOST,
-  );
+  // Option C: containers route through sidecar proxies on Docker networks.
+  // The old host-side credential proxy is no longer needed.
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
-    proxyServer.close();
     await stopMcp();
     await stopProxies();
     await queue.shutdown(10000);

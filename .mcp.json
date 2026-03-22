@@ -1,3 +1,16 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "flarion-sdr": {
+      "command": "python3",
+      "args": ["/Users/solweinreich/git/cockpit/.scripts/mcp-sdr/server.py"],
+      "env": {
+        "SCORER_DIR": "/Users/solweinreich/git/cockpit/.state/de-scorer",
+        "CRM_DIR": "/Users/solweinreich/git/cockpit/flarion/crm",
+        "ECOSYSTEM_PEOPLE_FILE": "/Users/solweinreich/git/cockpit/.state/persons.csv",
+        "SIGNALS_FILE": "/Users/solweinreich/git/cockpit/.state/signal-promotions.jsonl",
+        "CLAY_PROFILES": "/Users/solweinreich/git/cockpit/.state/clay-enriched-profiles.jsonl",
+        "SDR_SECRETS": "/Users/solweinreich/git/cockpit/.secrets/sdr.json"
+      }
+    }
+  }
 }

@@ -17,7 +17,10 @@ import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
-import { CONTAINER_RUNTIME_BIN, readonlyMountArgs } from './container-runtime.js';
+import {
+  CONTAINER_RUNTIME_BIN,
+  readonlyMountArgs,
+} from './container-runtime.js';
 import { SDR_DATA_MOUNTS } from './config.js';
 import { logger } from './logger.js';
 import { readEnvFile } from './env.js';
@@ -128,6 +131,9 @@ async function startProxy(opts: {
         `--read-only ` +
         `--cap-drop=ALL ` +
         `--security-opt=no-new-privileges:true ` +
+        `--memory=256m ` +
+        `--cpus=0.5 ` +
+        `--pids-limit=64 ` +
         opts.image,
     );
   } finally {
@@ -212,8 +218,41 @@ export async function ensureMcpRunning(): Promise<void> {
     return;
   }
 
+  // Fail fast: validate all required inputs exist before starting Docker.
+  // The 4 required paths map to config.py's required env vars.
+  const REQUIRED_CONTAINER_PATHS = [
+    '/data/scorer',
+    '/data/crm',
+    '/data/ecosystem-people.csv',
+    '/data/signals.jsonl',
+  ];
+  const configuredPaths = new Set(SDR_DATA_MOUNTS.map((m) => m.containerPath));
+  const missing = REQUIRED_CONTAINER_PATHS.filter((p) => !configuredPaths.has(p));
+  if (missing.length > 0) {
+    logger.error(
+      { missing },
+      'MCP sidecar cannot start: required SDR data mounts are missing. ' +
+        'Set SDR_SCORER_DIR, SDR_CRM_DIR, SDR_ECOSYSTEM_PEOPLE_FILE, and SDR_SIGNALS_FILE in .env',
+    );
+    return;
+  }
+
+  // Also validate host paths actually exist
+  for (const m of SDR_DATA_MOUNTS) {
+    if (!fs.existsSync(m.hostPath)) {
+      logger.error(
+        { hostPath: m.hostPath, containerPath: m.containerPath },
+        'MCP sidecar cannot start: host data path does not exist',
+      );
+      return;
+    }
+  }
+
   if (await containerRunning(MCP_CONTAINER_NAME)) {
-    logger.debug({ container: MCP_CONTAINER_NAME }, 'MCP sidecar already running');
+    logger.debug(
+      { container: MCP_CONTAINER_NAME },
+      'MCP sidecar already running',
+    );
     return;
   }
 
@@ -230,6 +269,39 @@ export async function ensureMcpRunning(): Promise<void> {
     mountArgs.push(...readonlyMountArgs(m.hostPath, m.containerPath));
   }
 
+  // Read Airtable config from .env (token stays in Airtable proxy, not here)
+  const airtableEnv = readEnvFile([
+    'AIRTABLE_BASE_ID',
+    'AIRTABLE_INTERACTIONS_TABLE',
+  ]);
+  const airtableBaseId =
+    process.env.AIRTABLE_BASE_ID || airtableEnv.AIRTABLE_BASE_ID;
+  const airtableTable =
+    process.env.AIRTABLE_INTERACTIONS_TABLE ||
+    airtableEnv.AIRTABLE_INTERACTIONS_TABLE ||
+    'SDR Outreach';
+
+  if (!airtableBaseId) {
+    logger.warn(
+      'AIRTABLE_BASE_ID not set — MCP sidecar will start without Airtable',
+    );
+  }
+
+  // Env vars the MCP server's config.py expects (container /data/ paths)
+  const envArgs: string[] = [
+    '-e', 'SCORER_DIR=/data/scorer',
+    '-e', 'CRM_DIR=/data/crm',
+    '-e', 'ECOSYSTEM_PEOPLE_FILE=/data/ecosystem-people.csv',
+    '-e', 'SIGNALS_FILE=/data/signals.jsonl',
+    '-e', 'CLAY_PROFILES=/data/clay-profiles.jsonl',
+    // Airtable via proxy: no token needed, proxy injects it
+    '-e', `AIRTABLE_BASE_URL=http://${AIRTABLE_PROXY_CONTAINER_NAME}:${AIRTABLE_PROXY_PORT}`,
+  ];
+  if (airtableBaseId) {
+    envArgs.push('-e', `AIRTABLE_BASE_ID=${airtableBaseId}`);
+  }
+  envArgs.push('-e', `AIRTABLE_INTERACTIONS_TABLE=${airtableTable}`);
+
   // Start on CONTROL_NETWORK (agent can reach it), then connect to MCP_EGRESS_NETWORK
   await dockerExec(
     `run -d --rm ` +
@@ -239,14 +311,20 @@ export async function ensureMcpRunning(): Promise<void> {
       `--read-only ` +
       `--cap-drop=ALL ` +
       `--security-opt=no-new-privileges:true ` +
+      `--memory=512m ` +
+      `--cpus=1.0 ` +
+      `--pids-limit=128 ` +
       `--tmpfs /tmp:rw,nosuid,size=64m ` +
+      envArgs.join(' ') + ' ' +
       mountArgs.join(' ') +
       (mountArgs.length > 0 ? ' ' : '') +
       MCP_IMAGE,
   );
 
   // Connect to MCP egress network so sidecar can reach Airtable proxy
-  await dockerExec(`network connect ${MCP_EGRESS_NETWORK} ${MCP_CONTAINER_NAME}`);
+  await dockerExec(
+    `network connect ${MCP_EGRESS_NETWORK} ${MCP_CONTAINER_NAME}`,
+  );
 
   logger.info(
     { container: MCP_CONTAINER_NAME, port: MCP_PORT },
