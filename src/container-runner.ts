@@ -146,7 +146,11 @@ function buildVolumeMounts(
   const settingsFile = path.join(groupSessionsDir, 'settings.json');
   // Always regenerate settings from host config (settings.json is mounted
   // read-only so the agent cannot modify it; the host is authoritative).
+  // Allow model override via CLAUDE_MODEL env var
+  const claudeModelSetting = process.env.CLAUDE_MODEL;
+
   const containerSettings: Record<string, unknown> = {
+    ...(claudeModelSetting ? { model: claudeModelSetting } : {}),
     env: {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
@@ -365,6 +369,12 @@ function buildContainerArgs(
   // Headless mode: agent returns structured result, no Slack posting
   if (input.headless) {
     args.push('-e', 'SDR_HEADLESS=1');
+  }
+
+  // Allow model override via CLAUDE_MODEL env var (e.g. for keys with limited model access)
+  const claudeModel = process.env.CLAUDE_MODEL;
+  if (claudeModel) {
+    args.push('-e', `CLAUDE_MODEL=${claudeModel}`);
   }
 
   // Network isolation: agent starts on control network (for MCP sidecar),
