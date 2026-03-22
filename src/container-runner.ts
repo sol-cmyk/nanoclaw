@@ -54,6 +54,10 @@ export interface ContainerInput {
   actorId?: string;
   /** Channel name where the request originated (for SDR audit trail) */
   channelName?: string;
+  /** Caller-provided run ID for audit trail. If omitted, auto-generated. */
+  runId?: string;
+  /** When true, agent runs in headless mode (no send_message, returns structured result) */
+  headless?: boolean;
 }
 
 export interface ContainerOutput {
@@ -348,14 +352,20 @@ function buildContainerArgs(
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
-  // Inject unique run ID for audit trail and idempotent writes
-  const runId = `${containerName}-${Date.now()}`;
+  // Inject run ID for audit trail and idempotent writes.
+  // Caller-provided runId (e.g. from Cockpit bot) takes precedence.
+  const runId = input.runId || `${containerName}-${Date.now()}`;
   args.push('-e', `SDR_RUN_ID=${runId}`);
 
   // SDR bridge metadata: actor identity and channel for audit trail.
   // The stdio-bridge sends these in the preface; the sidecar rejects empty values.
   args.push('-e', `SDR_ACTOR_ID=${input.actorId || 'unknown'}`);
   args.push('-e', `SDR_CHANNEL=${input.channelName || 'unknown'}`);
+
+  // Headless mode: agent returns structured result, no Slack posting
+  if (input.headless) {
+    args.push('-e', 'SDR_HEADLESS=1');
+  }
 
   // Network isolation: agent starts on control network (for MCP sidecar),
   // then gets connected to agent-egress network (for Anthropic proxy) after start.

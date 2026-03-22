@@ -29,6 +29,8 @@ interface ContainerInput {
   assistantName?: string;
   actorId?: string;
   channelName?: string;
+  runId?: string;
+  headless?: boolean;
 }
 
 interface ContainerOutput {
@@ -402,8 +404,10 @@ async function runQuery(
         ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
         : undefined,
       allowedTools: [
-        // nanoclaw IPC: send_message only (agent needs to reply in Slack)
-        'mcp__nanoclaw__send_message',
+        // Headless mode (SDR_HEADLESS=1): agent returns structured result,
+        // no Slack posting. Only 6 SDR tools.
+        // Interactive mode: also gets send_message for Slack replies.
+        ...(process.env.SDR_HEADLESS === '1' ? [] : ['mcp__nanoclaw__send_message']),
         // flarion-sdr tools (6) — exact tool surface, nothing else
         'mcp__flarion-sdr__get_account_score',
         'mcp__flarion-sdr__get_best_contacts',
