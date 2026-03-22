@@ -211,36 +211,49 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   // Extract actor identity from the most recent non-bot message for SDR audit trail.
   // Use sender (platform user ID) for stable audit, chatJid for channel identity.
-  const lastHumanMsg = [...missedMessages].reverse().find((m) => !m.is_bot_message && !m.is_from_me);
-  const actorId = lastHumanMsg?.sender || lastHumanMsg?.sender_name || 'unknown';
+  const lastHumanMsg = [...missedMessages]
+    .reverse()
+    .find((m) => !m.is_bot_message && !m.is_from_me);
+  const actorId =
+    lastHumanMsg?.sender || lastHumanMsg?.sender_name || 'unknown';
   const channelId = chatJid;
 
-  const output = await runAgent(group, prompt, chatJid, async (result) => {
-    // Streaming output callback — called for each agent result
-    if (result.result) {
-      const raw =
-        typeof result.result === 'string'
-          ? result.result
-          : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
-      if (text) {
-        await channel.sendMessage(chatJid, text);
-        outputSentToUser = true;
+  const output = await runAgent(
+    group,
+    prompt,
+    chatJid,
+    async (result) => {
+      // Streaming output callback — called for each agent result
+      if (result.result) {
+        const raw =
+          typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result);
+        // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
+        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        logger.info(
+          { group: group.name },
+          `Agent output: ${raw.slice(0, 200)}`,
+        );
+        if (text) {
+          await channel.sendMessage(chatJid, text);
+          outputSentToUser = true;
+        }
+        // Only reset idle timer on actual results, not session-update markers (result: null)
+        resetIdleTimer();
       }
-      // Only reset idle timer on actual results, not session-update markers (result: null)
-      resetIdleTimer();
-    }
 
-    if (result.status === 'success') {
-      queue.notifyIdle(chatJid);
-    }
+      if (result.status === 'success') {
+        queue.notifyIdle(chatJid);
+      }
 
-    if (result.status === 'error') {
-      hadError = true;
-    }
-  }, actorId, channelId);
+      if (result.status === 'error') {
+        hadError = true;
+      }
+    },
+    actorId,
+    channelId,
+  );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);

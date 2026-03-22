@@ -464,7 +464,10 @@ export async function runContainerAgent(
       { timeout: 15000 },
     )
       .then(() => {
-        logger.debug({ containerName }, 'Agent-egress network connected, sending input');
+        logger.debug(
+          { containerName },
+          'Agent-egress network connected, sending input',
+        );
         container.stdin.write(JSON.stringify(input));
         container.stdin.end();
       })

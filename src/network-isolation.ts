@@ -227,7 +227,9 @@ export async function ensureMcpRunning(): Promise<void> {
     '/data/signals.jsonl',
   ];
   const configuredPaths = new Set(SDR_DATA_MOUNTS.map((m) => m.containerPath));
-  const missing = REQUIRED_CONTAINER_PATHS.filter((p) => !configuredPaths.has(p));
+  const missing = REQUIRED_CONTAINER_PATHS.filter(
+    (p) => !configuredPaths.has(p),
+  );
   if (missing.length > 0) {
     logger.error(
       { missing },
@@ -289,13 +291,19 @@ export async function ensureMcpRunning(): Promise<void> {
 
   // Env vars the MCP server's config.py expects (container /data/ paths)
   const envArgs: string[] = [
-    '-e', 'SCORER_DIR=/data/scorer',
-    '-e', 'CRM_DIR=/data/crm',
-    '-e', 'ECOSYSTEM_PEOPLE_FILE=/data/ecosystem-people.csv',
-    '-e', 'SIGNALS_FILE=/data/signals.jsonl',
-    '-e', 'CLAY_PROFILES=/data/clay-profiles.jsonl',
+    '-e',
+    'SCORER_DIR=/data/scorer',
+    '-e',
+    'CRM_DIR=/data/crm',
+    '-e',
+    'ECOSYSTEM_PEOPLE_FILE=/data/ecosystem-people.csv',
+    '-e',
+    'SIGNALS_FILE=/data/signals.jsonl',
+    '-e',
+    'CLAY_PROFILES=/data/clay-profiles.jsonl',
     // Airtable via proxy: no token needed, proxy injects it
-    '-e', `AIRTABLE_BASE_URL=http://${AIRTABLE_PROXY_CONTAINER_NAME}:${AIRTABLE_PROXY_PORT}`,
+    '-e',
+    `AIRTABLE_BASE_URL=http://${AIRTABLE_PROXY_CONTAINER_NAME}:${AIRTABLE_PROXY_PORT}`,
   ];
   if (airtableBaseId) {
     envArgs.push('-e', `AIRTABLE_BASE_ID=${airtableBaseId}`);
@@ -315,7 +323,8 @@ export async function ensureMcpRunning(): Promise<void> {
       `--cpus=1.0 ` +
       `--pids-limit=128 ` +
       `--tmpfs /tmp:rw,nosuid,size=64m ` +
-      envArgs.join(' ') + ' ' +
+      envArgs.join(' ') +
+      ' ' +
       mountArgs.join(' ') +
       (mountArgs.length > 0 ? ' ' : '') +
       MCP_IMAGE,
