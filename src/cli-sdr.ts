@@ -105,7 +105,10 @@ async function main(): Promise<void> {
     isMain: true,
   };
 
-  logger.info({ runId, account, actorId, channel }, 'Starting headless SDR run');
+  logger.info(
+    { runId, account, actorId, channel },
+    'Starting headless SDR run',
+  );
 
   let output: ContainerOutput;
   try {
