@@ -545,9 +545,11 @@ async function main(): Promise<void> {
       }
 
       // Headless mode: single-turn, exit after first query.
+      // process.exit(0) is needed because the claude subprocess may keep the
+      // Node process alive even after the query loop ends.
       if (process.env.SDR_HEADLESS === '1') {
         log('Headless mode: single-turn complete, exiting');
-        break;
+        process.exit(0);
       }
 
       // If _close was consumed during the query, exit immediately.

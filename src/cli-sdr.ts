@@ -12,6 +12,7 @@
  *     --account Armis
  */
 
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { parseArgs } from 'util';
@@ -119,9 +120,12 @@ async function main(): Promise<void> {
     'Starting headless SDR run',
   );
 
-  let output: ContainerOutput;
+  // Collect streaming outputs. The agent-runner emits a result marker when done.
+  let lastOutput: ContainerOutput | undefined;
+  let containerName: string | null = null;
+
   try {
-    output = await runContainerAgent(
+    await runContainerAgent(
       group,
       {
         prompt: SDR_HEADLESS_PROMPT,
@@ -133,10 +137,21 @@ async function main(): Promise<void> {
         runId,
         headless: true,
       },
-      (_proc, containerName) => {
-        logger.info({ containerName }, 'SDR container started');
+      (_proc, name) => {
+        containerName = name;
+        logger.info({ containerName: name }, 'SDR container started');
       },
-      // No streaming callback — legacy mode, parse final stdout
+      // Streaming callback: capture result and exit immediately.
+      // For headless mode, we don't wait for the container to close.
+      async (output) => {
+        lastOutput = output;
+        // Kill the container — agent already emitted its result
+        if (containerName) {
+          try {
+            execSync(`docker stop ${containerName}`, { timeout: 10000, stdio: 'ignore' });
+          } catch { /* container may already be stopped */ }
+        }
+      },
     );
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -150,19 +165,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (output.status === 'error') {
+  if (!lastOutput || lastOutput.status === 'error') {
     console.log(
       JSON.stringify({
         decision: 'ERROR',
         account,
-        error: output.error || 'Container exited with error',
+        error: (lastOutput as ContainerOutput | undefined)?.error || 'No output from container',
       }),
     );
     process.exit(1);
   }
 
   // The agent's final message should be raw JSON. Try to extract it.
-  const raw = output.result || '';
+  const raw = (lastOutput as ContainerOutput).result || '';
   let parsed: Record<string, unknown> | null = null;
   try {
     parsed = JSON.parse(raw);
