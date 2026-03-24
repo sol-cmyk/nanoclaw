@@ -439,7 +439,7 @@ async function runQuery(
         },
         'flarion-sdr': {
           command: 'node',
-          args: ['/app/stdio-bridge.js'],
+          args: ['/app/stdio-bridge.cjs'],
           env: {
             MCP_SDR_HOST: process.env.MCP_SDR_HOST || 'nanoclaw-mcp',
             MCP_SDR_PORT: process.env.MCP_SDR_PORT || '9000',

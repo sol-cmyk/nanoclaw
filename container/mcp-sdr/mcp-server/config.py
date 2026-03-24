@@ -28,9 +28,9 @@ DATA_ROOT = Path("/data")
 SCORER_FILE = DATA_ROOT / "scorer" / "account-scores.json"
 CRM_ACCOUNTS_FILE = DATA_ROOT / "crm" / "accounts.json"
 CRM_CONTACTS_FILE = DATA_ROOT / "crm" / "contacts.json"
-ECOSYSTEM_PEOPLE_FILE = DATA_ROOT / "ecosystem-people.json"
-SIGNALS_FILE = DATA_ROOT / "signals.json"
-CLAY_PROFILES_FILE = DATA_ROOT / "clay-profiles.json"
+ECOSYSTEM_PEOPLE_FILE = DATA_ROOT / "ecosystem-people.csv"
+SIGNALS_FILE = DATA_ROOT / "signals.jsonl"
+CLAY_PROFILES_FILE = DATA_ROOT / "clay-profiles.jsonl"
 
 # Airtable via sidecar proxy — no direct internet access
 AIRTABLE_BASE_URL = "http://nanoclaw-airtable-proxy:3002"

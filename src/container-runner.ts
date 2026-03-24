@@ -130,6 +130,21 @@ function buildVolumeMounts(
     }
   }
 
+  // Write .mcp.json for the flarion-sdr MCP bridge in BOTH locations:
+  // - CWD (/workspace/group) for project-level discovery
+  // - .claude sessions dir for user-level discovery
+  // The bridge reads MCP_SDR_HOST/PORT and SDR_* from the container env.
+  const mcpJson = {
+    mcpServers: {
+      'flarion-sdr': {
+        command: 'node',
+        args: ['/app/stdio-bridge.cjs'],
+      },
+    },
+  };
+  const mcpJsonStr = JSON.stringify(mcpJson, null, 2) + '\n';
+  fs.writeFileSync(path.join(groupDir, '.mcp.json'), mcpJsonStr);
+
   // Per-group Claude sessions directory (isolated from other groups)
   // Ephemeral: wiped on every container start to prevent cross-run state
   // poisoning. Only settings.json and skills/ are seeded from host.
@@ -156,6 +171,16 @@ function buildVolumeMounts(
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
       // Disable persistent auto-memory to prevent cross-run state poisoning
       CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+    },
+    // Enable project-level MCP servers defined in .mcp.json
+    enableAllProjectMcpServers: true,
+    // Register flarion-sdr MCP server directly in settings.
+    // The bridge reads MCP_SDR_* and SDR_* from the container env.
+    mcpServers: {
+      'flarion-sdr': {
+        command: 'node',
+        args: ['/app/stdio-bridge.cjs'],
+      },
     },
     permissions: {
       // Deny dangerous shell commands that could escape the container sandbox

@@ -28,8 +28,16 @@ const PORT = parseInt(process.env.PROXY_PORT || "3001", 10);
 const UPSTREAM_HOST = "api.anthropic.com";
 const UPSTREAM_PORT = 443;
 
-const ALLOWED_METHOD = "POST";
-const ALLOWED_PATH = "/v1/messages";
+// Allowlist: method + path pattern
+// POST /v1/messages — inference
+// GET  /v1/models/*  — SDK model availability check (read-only)
+const MODELS_PATH_RE = /^\/v1\/models\/[a-z0-9._-]+$/;
+
+function isAllowed(method, url) {
+  if (method === "POST" && url === "/v1/messages") return true;
+  if (method === "GET" && MODELS_PATH_RE.test(url)) return true;
+  return false;
+}
 
 const server = createServer((req, res) => {
   // Block CONNECT (shouldn't arrive on HTTP server, but reject explicitly)
@@ -39,17 +47,13 @@ const server = createServer((req, res) => {
     return;
   }
 
-  // Reject non-POST methods
-  if (req.method !== ALLOWED_METHOD) {
-    res.writeHead(405, { "content-type": "text/plain" });
-    res.end("Method Not Allowed");
-    return;
-  }
+  // Strip query string for matching (path only)
+  const urlPath = (req.url || "").split("?")[0];
 
-  // Reject paths other than /v1/messages
-  if (req.url !== ALLOWED_PATH) {
-    res.writeHead(404, { "content-type": "text/plain" });
-    res.end("Not Found");
+  if (!isAllowed(req.method, urlPath)) {
+    const code = req.method === "GET" || req.method === "POST" ? 404 : 405;
+    res.writeHead(code, { "content-type": "text/plain" });
+    res.end(code === 405 ? "Method Not Allowed" : "Not Found");
     return;
   }
 
@@ -74,8 +78,8 @@ const server = createServer((req, res) => {
       {
         hostname: UPSTREAM_HOST,
         port: UPSTREAM_PORT,
-        path: ALLOWED_PATH,
-        method: ALLOWED_METHOD,
+        path: req.url,
+        method: req.method,
         headers,
       },
       (upRes) => {
@@ -105,7 +109,7 @@ server.on("connect", (req, socket) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Anthropic proxy listening on 0.0.0.0:${PORT} -> https://${UPSTREAM_HOST}`);
-  console.log(`Allowed: ${ALLOWED_METHOD} ${ALLOWED_PATH}`);
+  console.log(`Allowed: POST /v1/messages, GET /v1/models/*`);
 });
 
 process.on("SIGTERM", () => {
