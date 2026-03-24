@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 from urllib.parse import quote
+
+logger = logging.getLogger("flarion-sdr-mcp")
 
 import httpx
 
@@ -126,6 +129,12 @@ class AirtableClient:
                 table,
                 json={"records": [{"id": existing_id, "fields": fields}]},
             )
+            if response.status_code == 422:
+                logger.error(
+                    "Airtable 422 on update. Fields: %s. Response: %s",
+                    json.dumps(fields, default=str),
+                    response.text[:500],
+                )
             response.raise_for_status()
             body = response.json()
             record = (body.get("records") or [{}])[0]
@@ -138,7 +147,14 @@ class AirtableClient:
             )
         else:
             # Insert new record
-            response = self._client.post(table, json={"records": [{"fields": fields}]})
+            request_body = {"records": [{"fields": fields}]}
+            response = self._client.post(table, json=request_body)
+            if response.status_code == 422:
+                logger.error(
+                    "Airtable 422 on insert. Request fields: %s. Response: %s",
+                    json.dumps(fields, default=str),
+                    response.text[:500],
+                )
             response.raise_for_status()
             body = response.json()
             record = (body.get("records") or [{}])[0]
