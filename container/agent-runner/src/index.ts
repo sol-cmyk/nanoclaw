@@ -415,12 +415,12 @@ async function runQuery(
         // no Slack posting. Only 6 SDR tools.
         // Interactive mode: also gets send_message for Slack replies.
         ...(process.env.SDR_HEADLESS === '1' ? [] : ['mcp__nanoclaw__send_message']),
-        // flarion-sdr tools (6) — exact tool surface, nothing else
+        // flarion-sdr tools (5) — exact tool surface, nothing else.
+        // enrich_contact excluded: not needed for /sdr workflow, adds side effects.
         'mcp__flarion-sdr__get_account_score',
         'mcp__flarion-sdr__get_best_contacts',
         'mcp__flarion-sdr__get_timing_signals',
         'mcp__flarion-sdr__get_recent_outreach',
-        'mcp__flarion-sdr__enrich_contact',
         'mcp__flarion-sdr__log_outreach',
       ],
       env: sdkEnv,
@@ -542,6 +542,12 @@ async function main(): Promise<void> {
       }
       if (queryResult.lastAssistantUuid) {
         resumeAt = queryResult.lastAssistantUuid;
+      }
+
+      // Headless mode: single-turn, exit after first query.
+      if (process.env.SDR_HEADLESS === '1') {
+        log('Headless mode: single-turn complete, exiting');
+        break;
       }
 
       // If _close was consumed during the query, exit immediately.

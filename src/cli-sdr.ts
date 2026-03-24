@@ -40,6 +40,7 @@ const { values: args } = parseArgs({
     'actor-id': { type: 'string' },
     channel: { type: 'string' },
     account: { type: 'string' },
+    'dry-run': { type: 'boolean', default: false },
   },
   strict: true,
 });
@@ -48,24 +49,34 @@ const runId = args['run-id'];
 const actorId = args['actor-id'];
 const channel = args.channel;
 const account = args.account;
+const dryRun = args['dry-run'] ?? false;
 
 if (!runId || !actorId || !channel || !account) {
   console.error(
-    'Usage: node dist/cli-sdr.js --run-id <id> --actor-id <id> --channel <id> --account <name>',
+    'Usage: node dist/cli-sdr.js --run-id <id> --actor-id <id> --channel <id> --account <name> [--dry-run]',
   );
   process.exit(2);
 }
 
 // --- SDR headless prompt ---
 
+const logInstruction = dryRun
+  ? 'Do NOT call log_outreach. Return the JSON result only.'
+  : `If SKIP: call log_outreach(status="skipped") with the reason.
+If PROCEED: call log_outreach(status="draft") with all fields (account_id, crm_contact_id, angle, why_now, draft_text).`;
+
 const SDR_HEADLESS_PROMPT = `You are running in headless SDR mode for account: ${account}
+${dryRun ? '\n** DRY RUN MODE ** Do not write to Airtable.\n' : ''}
+Execute this workflow in order. Stop early if the gate fails.
 
-Follow the /sdr skill workflow (Steps 1-6) exactly. Then:
+Step 1: Call get_account_score for "${account}".
+Step 2: Call get_timing_signals for the account. If ZERO signals, SKIP immediately. Do not proceed to later steps.
+Step 3: Call get_best_contacts for the account.
+Step 4: Pick the best contact and angle based on the data.
+Step 5: Draft a 4-line email.
+Step 6: ${logInstruction}
 
-1. If SKIP: call log_outreach(status="skipped") with the reason, then return ONLY a JSON object.
-2. If PROCEED: call log_outreach(status="draft") with all fields (account_id, crm_contact_id, angle, why_now, draft_text), then return ONLY a JSON object.
-
-Your final message MUST be a single JSON object with these keys:
+Your final message MUST be a single raw JSON object (no markdown fences):
 {
   "decision": "PROCEED" or "SKIP",
   "account": "<account name>",
@@ -78,9 +89,7 @@ Your final message MUST be a single JSON object with these keys:
   "data_cited": "<exact fact backing the angle or null>",
   "draft_email": "<full email text or null>",
   "skip_reason": "<reason or null>"
-}
-
-Do NOT post to Slack (you have no send_message tool). Do NOT wrap the JSON in markdown code fences. Return ONLY the raw JSON object as your final message.`;
+}`;
 
 // --- Main ---
 
@@ -106,7 +115,7 @@ async function main(): Promise<void> {
   };
 
   logger.info(
-    { runId, account, actorId, channel },
+    { runId, account, actorId, channel, dryRun },
     'Starting headless SDR run',
   );
 
