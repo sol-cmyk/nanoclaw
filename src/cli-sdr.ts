@@ -148,8 +148,13 @@ async function main(): Promise<void> {
         // Kill the container — agent already emitted its result
         if (containerName) {
           try {
-            execSync(`docker stop ${containerName}`, { timeout: 10000, stdio: 'ignore' });
-          } catch { /* container may already be stopped */ }
+            execSync(`docker stop ${containerName}`, {
+              timeout: 10000,
+              stdio: 'ignore',
+            });
+          } catch {
+            /* container may already be stopped */
+          }
         }
       },
     );
@@ -170,7 +175,9 @@ async function main(): Promise<void> {
       JSON.stringify({
         decision: 'ERROR',
         account,
-        error: (lastOutput as ContainerOutput | undefined)?.error || 'No output from container',
+        error:
+          (lastOutput as ContainerOutput | undefined)?.error ||
+          'No output from container',
       }),
     );
     process.exit(1);
