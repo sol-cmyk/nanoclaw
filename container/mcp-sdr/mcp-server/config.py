@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -49,12 +50,17 @@ class Settings:
     airtable_base_url: str
     airtable_base_id: str
     airtable_interactions_table: str
+    postgres_dsn: str | None = None
     airtable_fields: dict[str, str] = field(default_factory=lambda: DEFAULT_AIRTABLE_FIELDS.copy())
     max_recent_outreach: int = 25
 
     @property
     def has_airtable(self) -> bool:
         return bool(self.airtable_base_url and self.airtable_base_id and self.airtable_interactions_table)
+
+    @property
+    def has_postgres(self) -> bool:
+        return bool(self.postgres_dsn)
 
 
 def load_settings() -> Settings:
@@ -72,6 +78,9 @@ def load_settings() -> Settings:
 
     clay_profiles = CLAY_PROFILES_FILE if CLAY_PROFILES_FILE.exists() else None
 
+    # Postgres DSN from env (injected by network-isolation.ts at container startup)
+    postgres_dsn = os.environ.get("POSTGRES_DSN", "") or None
+
     return Settings(
         scorer_file=SCORER_FILE,
         crm_accounts_file=CRM_ACCOUNTS_FILE,
@@ -82,4 +91,5 @@ def load_settings() -> Settings:
         airtable_base_url=AIRTABLE_BASE_URL,
         airtable_base_id=AIRTABLE_BASE_ID,
         airtable_interactions_table=AIRTABLE_INTERACTIONS_TABLE,
+        postgres_dsn=postgres_dsn,
     )

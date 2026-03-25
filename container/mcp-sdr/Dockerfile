@@ -3,7 +3,8 @@
 FROM python:3.12-slim
 
 # Install MCP server dependencies (no dev deps)
-RUN pip install --no-cache-dir mcp pydantic httpx
+# psycopg2-binary for Postgres backbone support (optional at runtime via POSTGRES_DSN)
+RUN pip install --no-cache-dir mcp pydantic httpx psycopg2-binary
 
 # Create non-root user with fixed UID
 RUN useradd -r -u 9999 -s /bin/false mcpuser

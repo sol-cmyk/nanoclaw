@@ -22,6 +22,7 @@ from data import (
     parse_isoish,
     read_records,
     safe_preview,
+    sanitize_for_prompt,
 )
 from models import (
     AccountScoreResult,
@@ -65,6 +66,24 @@ class ServiceContainer:
         )
         self.airtable = AirtableClient(settings) if settings.has_airtable else None
 
+        # Postgres backbone: try once at startup, cache result
+        self.pg = None
+        try:
+            from postgres_backend import PostgresBackend
+            if PostgresBackend.available():
+                self.pg = PostgresBackend()
+                logger.info("Postgres backbone available — using as primary data source")
+            else:
+                logger.info("Postgres backbone not available — using file fallback")
+        except ImportError:
+            logger.info("postgres_backend not importable (psycopg2 missing?) — using file fallback")
+        except Exception as e:
+            logger.warning("Postgres backend init failed: %s — using file fallback", e)
+
+    @property
+    def has_postgres(self) -> bool:
+        return self.pg is not None
+
 
 _services: ServiceContainer | None = None
 
@@ -83,6 +102,22 @@ def get_account_score(account_id: str) -> AccountScoreResult:
     Pass the canonical account_id when possible. The tool will also try known aliases and names.
     """
     svc = services()
+
+    # --- Postgres path (primary) ---
+    if svc.has_postgres:
+        pg_data = svc.pg.get_account_score(account_id)
+        if pg_data:
+            account = svc.resolver.resolve_account(account_id)
+            return AccountScoreResult(
+                account=account,
+                fit_score=pg_data.get("fit_score"),
+                tier=pg_data.get("tier"),
+                reasons=[sanitize_for_prompt(r) for r in pg_data.get("reasons", [])],
+                highlights=[sanitize_for_prompt(h) for h in pg_data.get("highlights", [])],
+                source_record={},
+            )
+
+    # --- File fallback ---
     account = svc.resolver.resolve_account(account_id)
     best_record: dict[str, Any] | None = None
     best_path: Path | None = None
@@ -108,12 +143,12 @@ def get_account_score(account_id: str) -> AccountScoreResult:
         "de_signal_tier", "tier", "segment", "priority", "bucket",
     ])
 
-    reasons = coerce_list(best_record, ["reasons", "fit_reasons", "why_fit", "notes"])
-    highlights = coerce_list(best_record, ["highlights", "summary_points", "signals"])
+    reasons = [sanitize_for_prompt(r) for r in coerce_list(best_record, ["reasons", "fit_reasons", "why_fit", "notes"])]
+    highlights = [sanitize_for_prompt(h) for h in coerce_list(best_record, ["highlights", "summary_points", "signals"])]
     if not reasons:
         summary = coerce_str(best_record, ["summary", "why_fit_summary", "fit_summary"])
         if summary:
-            reasons.append(summary)
+            reasons.append(sanitize_for_prompt(summary))
 
     # Build highlights from scorer booleans if no explicit highlights
     if not highlights:
@@ -150,6 +185,29 @@ def get_best_contacts(account_id: str, limit: int = 5) -> BestContactsResult:
     """
     svc = services()
     account = svc.resolver.resolve_account(account_id)
+
+    # --- Postgres path ---
+    if svc.has_postgres:
+        pg_contacts = svc.pg.get_best_contacts(account_id, limit=max(1, min(limit, 10)))
+        if pg_contacts:
+            contacts = [
+                ContactCandidate(
+                    crm_contact_id=c.get("crm_contact_id"),
+                    name=c.get("name", ""),
+                    email=c.get("email"),
+                    title=c.get("title"),
+                    linkedin=c.get("linkedin"),
+                    why_selected=[s for s in [c.get("seniority"), c.get("persona_group"), c.get("role")] if s],
+                )
+                for c in pg_contacts
+            ]
+            return BestContactsResult(
+                account=account,
+                contacts=contacts,
+                notes=[f"Returned {len(contacts)} contacts from backbone"],
+            )
+
+    # --- File fallback ---
     contacts = svc.resolver.best_contacts_for_account(account, limit=max(1, min(limit, 10)))
     notes: list[str] = []
     if not contacts:
@@ -164,11 +222,31 @@ def get_timing_signals(account_id: str, limit: int = 5) -> TimingSignalsResult:
     """Return recent timing signals for one account from the verified signals store."""
     svc = services()
     account = svc.resolver.resolve_account(account_id)
+
+    # --- Postgres path ---
+    if svc.has_postgres:
+        pg_signals = svc.pg.get_timing_signals(account_id, limit=max(1, min(limit, 10)))
+        if pg_signals is not None:  # empty list is valid (no signals)
+            signals = [
+                TimingSignal(
+                    signal_type=s.get("signal_type"),
+                    summary=sanitize_for_prompt(s.get("summary", "")),
+                    observed_at=s.get("observed_at"),
+                    score=s.get("score"),
+                    source=s.get("source", "backbone"),
+                    source_record={},
+                )
+                for s in pg_signals
+            ]
+            notes = [f"Returned {len(signals)} signals from backbone"] if signals else ["No timing signals in backbone"]
+            return TimingSignalsResult(account=account, signals=signals, notes=notes)
+
+    # --- File fallback ---
     signals: list[TimingSignal] = []
     for file_path, record in read_records(svc.settings.signals_file):
         if not svc.resolver.account_record_matches(record, account):
             continue
-        summary = coerce_str(record, ["summary", "signal", "description", "event", "title"]) or "Signal matched the account"
+        summary = sanitize_for_prompt(coerce_str(record, ["summary", "signal", "description", "event", "title"]) or "Signal matched the account")
         observed = coerce_str(record, SIGNAL_DATE_KEYS)
         score = coerce_float(record, SIGNAL_SCORE_KEYS)
         signal_type = coerce_str(record, ["signal_type", "type", "category"])
@@ -196,17 +274,26 @@ def get_timing_signals(account_id: str, limit: int = 5) -> TimingSignalsResult:
 
 @mcp.tool()
 def get_recent_outreach(account_id: str, limit: int = 10) -> RecentOutreachResult:
-    """Return recent outreach rows from Airtable for a single account.
+    """Return recent outreach rows for a single account.
 
-    Reads from the SDR Outreach table via the Airtable sidecar proxy.
+    Reads from Postgres backbone (primary) or Airtable (fallback).
     """
     svc = services()
     account = svc.resolver.resolve_account(account_id)
+
+    # --- Postgres path ---
+    if svc.has_postgres:
+        pg_outreach = svc.pg.get_recent_outreach(account_id, limit=max(1, min(limit, 25)))
+        if pg_outreach is not None:
+            notes = [f"Returned {len(pg_outreach)} outreach records from backbone"] if pg_outreach else ["No recent outreach in backbone"]
+            return RecentOutreachResult(account=account, records=pg_outreach, notes=notes)
+
+    # --- Airtable fallback ---
     if svc.airtable is None:
         return RecentOutreachResult(
             account=account,
             records=[],
-            notes=["Airtable is not configured yet"],
+            notes=["Neither Postgres nor Airtable configured for outreach"],
         )
     records = svc.airtable.list_recent_outreach(account, limit=max(1, min(limit, svc.settings.max_recent_outreach)))
     notes = [f"Returned {len(records)} Airtable records"] if records else ["No recent outreach found in Airtable"]
@@ -218,6 +305,21 @@ def enrich_contact(crm_contact_id: str) -> EnrichmentResult:
     """Return cached enrichment data for one contact. Read-only cache lookup."""
     svc = services()
     contact = svc.resolver.resolve_contact(crm_contact_id)
+
+    # --- Postgres path ---
+    if svc.has_postgres:
+        pg_data = svc.pg.enrich_contact(crm_contact_id)
+        if pg_data:
+            return EnrichmentResult(
+                contact=contact,
+                found_in_cache=True,
+                queued_with_clay=False,
+                cache_record=safe_preview(pg_data),
+                queue_response={},
+                notes=["used Postgres enrichment cache"],
+            )
+
+    # --- File fallback ---
     cache_record: dict[str, Any] | None = None
     if svc.settings.clay_profiles and svc.settings.clay_profiles.exists():
         for _, record in read_records(svc.settings.clay_profiles):
@@ -241,14 +343,13 @@ def enrich_contact(crm_contact_id: str) -> EnrichmentResult:
 
 @mcp.tool()
 def log_outreach(payload: dict[str, Any]) -> LogOutreachResult:
-    """Write one outreach decision row to Airtable.
+    """Write one outreach decision row.
 
+    Writes to Postgres backbone (primary) and Airtable (if configured).
     Agent can write: draft, skipped, failed.
     Agent CANNOT write: approved, sent (those are host-only after human approval).
     """
     svc = services()
-    if svc.airtable is None:
-        return LogOutreachResult(success=False, notes=["Airtable is not configured yet"])
     validated = LogOutreachPayload.model_validate(payload)
     # Always overwrite run_id from host env (agent cannot choose its own audit key)
     validated.run_id = os.environ.get("SDR_RUN_ID")
@@ -260,7 +361,41 @@ def log_outreach(payload: dict[str, Any]) -> LogOutreachResult:
     # Resolve to canonical account ID before writing to prevent fragmentation
     account = svc.resolver.resolve_account(validated.account_id)
     validated.account_id = account.id
-    return svc.airtable.upsert_outreach_record(validated)
+
+    notes: list[str] = []
+
+    # --- Postgres write (primary) ---
+    if svc.has_postgres:
+        pg_result = svc.pg.log_outreach(
+            account_ref=validated.account_id,
+            contact_id=validated.crm_contact_id,
+            status=validated.status,
+            angle=validated.angle,
+            why_now=validated.why_now,
+            draft_text=validated.draft_text,
+            run_id=validated.run_id,
+            metadata={"data_cited": validated.data_cited} if hasattr(validated, "data_cited") else None,
+        )
+        if pg_result.get("success"):
+            notes.append("logged to Postgres backbone")
+        else:
+            notes.extend(pg_result.get("notes", []))
+
+    # --- Airtable write (secondary, if configured) ---
+    if svc.airtable is not None:
+        try:
+            airtable_result = svc.airtable.upsert_outreach_record(validated)
+            if airtable_result.success:
+                notes.append("logged to Airtable")
+            else:
+                notes.extend(airtable_result.notes)
+        except Exception as e:
+            notes.append(f"Airtable write failed (non-fatal): {e}")
+
+    if not notes:
+        return LogOutreachResult(success=False, notes=["Neither Postgres nor Airtable configured"])
+
+    return LogOutreachResult(success=True, notes=notes)
 
 
 def main() -> None:

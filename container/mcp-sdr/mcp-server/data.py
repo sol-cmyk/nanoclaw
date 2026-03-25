@@ -185,6 +185,36 @@ def slugify(value: Any) -> str:
 
 
 
+# F073: prompt injection sanitization for untrusted CRM/enrichment data
+_PROMPT_INJECTION_PATTERNS = [
+    "ignore previous instructions",
+    "ignore all instructions",
+    "ignore above instructions",
+    "disregard previous",
+    "forget your instructions",
+    "you are now",
+    "new instructions:",
+    "system prompt:",
+    "IMPORTANT:",
+    "<system>",
+    "</system>",
+    "<instructions>",
+]
+
+
+def sanitize_for_prompt(value: Any, max_len: int = 500) -> str:
+    """Strip known prompt injection markers and cap length on untrusted text fields."""
+    if not isinstance(value, str):
+        return str(value)[:max_len] if value is not None else ""
+    s = value[:max_len]
+    lower = s.lower()
+    for pattern in _PROMPT_INJECTION_PATTERNS:
+        if pattern.lower() in lower:
+            s = s[:lower.index(pattern.lower())] + "[FILTERED]"
+            break
+    return s
+
+
 def safe_preview(record: dict[str, Any], limit: int = 12) -> dict[str, Any]:
     preview: dict[str, Any] = {}
     for index, (key, value) in enumerate(record.items()):

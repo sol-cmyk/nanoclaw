@@ -271,10 +271,11 @@ export async function ensureMcpRunning(): Promise<void> {
     mountArgs.push(...readonlyMountArgs(m.hostPath, m.containerPath));
   }
 
-  // Read Airtable config from .env (token stays in Airtable proxy, not here)
+  // Read Airtable + Postgres config from .env (tokens stay in proxies, not here)
   const airtableEnv = readEnvFile([
     'AIRTABLE_BASE_ID',
     'AIRTABLE_INTERACTIONS_TABLE',
+    'POSTGRES_DSN',
   ]);
   const airtableBaseId =
     process.env.AIRTABLE_BASE_ID || airtableEnv.AIRTABLE_BASE_ID;
@@ -304,18 +305,33 @@ export async function ensureMcpRunning(): Promise<void> {
   }
   envLines.push(`AIRTABLE_INTERACTIONS_TABLE=${airtableTable}`);
 
+  // Postgres backbone: pass DSN so MCP sidecar can use Postgres-first reads/writes.
+  // For local dev, DSN should use host.docker.internal (routed via --add-host below).
+  // For Fargate, DSN points directly to EC2 private IP.
+  const postgresDsn =
+    process.env.POSTGRES_DSN || airtableEnv.POSTGRES_DSN;
+  if (postgresDsn) {
+    envLines.push(`POSTGRES_DSN=${postgresDsn}`);
+    logger.info('Postgres DSN configured for MCP sidecar');
+  } else {
+    logger.info('POSTGRES_DSN not set — MCP sidecar will use file fallback only');
+  }
+
   const mcpEnvFilePath = path.join(os.tmpdir(), '.nanoclaw-mcp-sdr-env');
   try {
     fs.writeFileSync(mcpEnvFilePath, envLines.join('\n') + '\n', {
       mode: 0o600,
     });
 
-    // Start on CONTROL_NETWORK (agent can reach it), then connect to MCP_EGRESS_NETWORK
+    // Start on CONTROL_NETWORK (agent can reach it), then connect to MCP_EGRESS_NETWORK.
+    // --add-host lets the container reach the Docker host (for SSH-tunneled Postgres in local dev).
+    // On Fargate, POSTGRES_DSN points directly to EC2 so this flag is harmless.
     await dockerExec(
       `run -d --rm ` +
         `--name ${MCP_CONTAINER_NAME} ` +
         `--network ${CONTROL_NETWORK} ` +
         `--env-file ${mcpEnvFilePath} ` +
+        `--add-host=host.docker.internal:host-gateway ` +
         `--user 9999:9999 ` +
         `--read-only ` +
         `--cap-drop=ALL ` +
