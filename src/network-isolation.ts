@@ -308,13 +308,14 @@ export async function ensureMcpRunning(): Promise<void> {
   // Postgres backbone: pass DSN so MCP sidecar can use Postgres-first reads/writes.
   // For local dev, DSN should use host.docker.internal (routed via --add-host below).
   // For Fargate, DSN points directly to EC2 private IP.
-  const postgresDsn =
-    process.env.POSTGRES_DSN || airtableEnv.POSTGRES_DSN;
+  const postgresDsn = process.env.POSTGRES_DSN || airtableEnv.POSTGRES_DSN;
   if (postgresDsn) {
     envLines.push(`POSTGRES_DSN=${postgresDsn}`);
     logger.info('Postgres DSN configured for MCP sidecar');
   } else {
-    logger.info('POSTGRES_DSN not set — MCP sidecar will use file fallback only');
+    logger.info(
+      'POSTGRES_DSN not set — MCP sidecar will use file fallback only',
+    );
   }
 
   const mcpEnvFilePath = path.join(os.tmpdir(), '.nanoclaw-mcp-sdr-env');
