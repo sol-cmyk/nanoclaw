@@ -276,6 +276,22 @@ function buildVolumeMounts(
       fs.cpSync(srcDir, dstDir, { recursive: true });
     }
   }
+  // Sync agents from container/agents/ into each group's .claude/agents/
+  // Same pattern as skills: prune and re-copy to prevent stale agents
+  const agentsSrc = path.join(process.cwd(), 'container', 'agents');
+  const agentsDst = path.join(groupSessionsDir, 'agents');
+  if (fs.existsSync(agentsDst)) {
+    fs.rmSync(agentsDst, { recursive: true });
+  }
+  if (fs.existsSync(agentsSrc)) {
+    for (const agentDir of fs.readdirSync(agentsSrc)) {
+      const srcDir = path.join(agentsSrc, agentDir);
+      if (!fs.statSync(srcDir).isDirectory()) continue;
+      const dstDir = path.join(agentsDst, agentDir);
+      fs.cpSync(srcDir, dstDir, { recursive: true });
+    }
+  }
+
   mounts.push({
     hostPath: groupSessionsDir,
     containerPath: '/home/node/.claude',

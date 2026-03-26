@@ -70,6 +70,10 @@ let messageLoopRunning = false;
 const channels: Channel[] = [];
 const queue = new GroupQueue();
 
+// Track chatJids that received a send_message IPC during the current agent run.
+// When the agent posts via send_message, the result callback should not re-post.
+const ipcSentDuringRun = new Set<string>();
+
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
   const agentTs = getRouterState('last_agent_timestamp');
@@ -208,6 +212,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   await channel.setTyping?.(chatJid, true);
   let hadError = false;
   let outputSentToUser = false;
+  ipcSentDuringRun.delete(chatJid);
 
   // Extract actor identity from the most recent non-bot message for SDR audit trail.
   // Use sender (platform user ID) for stable audit, chatJid for channel identity.
@@ -236,7 +241,16 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
           `Agent output: ${raw.slice(0, 200)}`,
         );
         if (text) {
-          await channel.sendMessage(chatJid, text);
+          // If the agent already posted via send_message IPC, don't re-send
+          // the result text — it would be a duplicate.
+          if (ipcSentDuringRun.has(chatJid)) {
+            logger.info(
+              { group: group.name },
+              'Skipping result send — agent already posted via send_message IPC',
+            );
+          } else {
+            await channel.sendMessage(chatJid, text);
+          }
           outputSentToUser = true;
         }
         // Only reset idle timer on actual results, not session-update markers (result: null)
@@ -650,6 +664,7 @@ async function main(): Promise<void> {
     sendMessage: (jid, text) => {
       const channel = findChannel(channels, jid);
       if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      ipcSentDuringRun.add(jid);
       return channel.sendMessage(jid, text);
     },
     registeredGroups: () => registeredGroups,

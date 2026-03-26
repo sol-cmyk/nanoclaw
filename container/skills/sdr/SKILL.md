@@ -1,130 +1,94 @@
-# /sdr — SDR Prep Workflow
+---
+name: sdr
+description: SDR outbound prep — orchestrates research, planning, drafting, and critique for one account at a time
+---
 
-Run outbound prep for one account at a time. Gather context, decide whether to proceed, pick the best contact, choose a data-backed angle, draft structured outreach, and post for approval.
+# /sdr — SDR Outbound Workflow
 
-## Trigger
+Orchestrate outbound prep for one account. Dispatch specialized subagents for research, planning, drafting, and critique.
 
-User says `/sdr work <account>` or `/sdr prep <account>`.
+## Triggers
+
+- `/sdr work <account>` — full workflow for one account
+- `/sdr train` — training mode: draft emails for multiple accounts, collect human feedback
+
+## Architecture
+
+You are the orchestrator. You do NOT research, plan, draft, or critique emails yourself. You dispatch specialized agents:
+
+1. **sdr-researcher** — Gathers account data, qualifies, picks contact, returns structured JSON
+2. **sdr-email-planner** — Picks hook, pain, proof, CTA from research record
+3. **sdr-email-drafter** — Writes one email from the plan
+4. **sdr-email-critic** — Scores the draft, decides SHIP/REWRITE/KILL
 
 ## Tools Available
 
-You have 6 MCP tools from the `flarion-sdr` server. Use them in this order:
+- `Agent` tool to dispatch subagents
+- `mcp__nanoclaw__send_message` to post to Slack
+- `mcp__flarion-sdr__log_outreach` to log to Airtable
+- `Read` to load approved examples and proof points from `/workspace/group/email-data/`
 
-1. `get_account_score(account_id)` — Account fit: tier, DE density, infrastructure, leader presence
-2. `get_best_contacts(account_id, limit)` — Ranked contacts by seniority and relationship strength
-3. `get_timing_signals(account_id, limit)` — Recent timing signals (repo activity, evaluations, hiring)
-4. `get_recent_outreach(account_id, limit)` — Past outreach from Airtable (avoid re-contacting too soon)
-5. `enrich_contact(crm_contact_id)` — Clay enrichment cache or queue enrichment
-6. `log_outreach(payload)` — Write approved/skipped result to Airtable
+## Standard Workflow (`/sdr work <account>`)
 
-## Workflow
+### Step 1: Dispatch researcher
 
-### Step 1: Gather context
+```
+Research account: <account name>
+```
 
-Call `get_account_score`, `get_best_contacts`, and `get_timing_signals` for the account.
+If decision = SKIP: post skip to Slack, log to Airtable, stop.
+If decision = PROCEED: continue.
 
-### Step 2: Decide whether to proceed (SKIP gate)
+### Step 2: Enrich the research record
 
-Evaluate the data you have so far (score, contacts, signals). You MUST return SKIP if:
-- Zero timing signals (this alone is sufficient to SKIP, regardless of fit or contacts)
+Before passing to the planner, add these fields to the research record:
+- `sender`: "Sol" (default) or "Udi" if user specified
+- `approved_proof_points`: read from `/workspace/group/email-data/proof-points.md`
+- `approved_examples`: read last 5 entries from `/workspace/group/email-data/approved-examples.jsonl` (may be empty early on)
 
-If timing signals exist, PROCEED. The signal is the trigger. Fit data and warm paths improve the email but do not gate whether you write one.
+### Step 3: Dispatch planner
 
-If you SKIP, post this to Slack and log it:
+Pass the enriched research record to `sdr-email-planner`. It returns a plan (hook, pain, proof, CTA, personalization guide, word target).
 
+### Step 4: Dispatch drafter
+
+Pass the plan + enriched research record + approved examples to `sdr-email-drafter`. It returns a draft with subject lines and word count.
+
+### Step 5: Dispatch critic
+
+Pass the draft + plan + research record to `sdr-email-critic`. It returns scores and a decision.
+
+### Step 6: Handle critic decision
+
+**SHIP**: Continue to Step 7.
+
+**REWRITE** (max 2 cycles): Pass the critic's `rewrite_instructions` + original plan + research back to the drafter. Then re-run the critic on the new draft. If it ships after rewrite, continue. If still REWRITE after 2 cycles, post both versions to Slack and let the human choose.
+
+**KILL**: Post to Slack:
 ```
 **Account:** [name]
-**Decision:** SKIP
-**Reason:** [specific reason: no fit signal, no timing signal, no warm path]
+**Decision:** KILL
+**Reason:** [kill_reason from critic]
+**Critic scores:** [summary]
 ```
-
-Call `log_outreach` with status `skipped` and the reason. Do not draft an email. Stop. No override.
-
-### Step 3: Check outreach history
-
-Call `get_recent_outreach`. If the account was contacted in the last 14 days, flag it and ask whether to proceed.
-
-### Step 4: Pick one contact
-
-From the contacts returned, pick the single best person based on:
-- Title seniority (VP/Head/Director > Manager > IC)
-- Has email
-- Has warm path or intro available
-- Not contacted recently
-
-Do NOT call `enrich_contact` yet. Enrichment can trigger a Clay webhook (external write). Only enrich after the user approves the draft in Step 7.
-
-### Step 5: Choose one angle from verifiable timing data
-
-Every angle MUST cite a **timing signal** from `get_timing_signals`. Fit data (scorer tier, leader presence) and enrichment bios are context, not triggers. They help you write a better email, but they cannot justify sending one.
-
-| Required: timing signal | Angle | Context that strengthens it |
-|-------------------------|-------|-----------------------------|
-| Active Spark evaluation | Cost + performance comparison | Scorer tier, infrastructure field |
-| Cloud cost initiative or FinOps hiring | Managed Spark cost reduction | Contact bio mentions cost optimization |
-| Data platform migration | Platform-agnostic Spark (AWS, GCP, Azure) | Contact leads the migration team |
-| Scaling pain or infrastructure growth | Runtime optimization without code changes | High DE density confirms scale |
-| Databricks cost concern | Independent Spark, not locked to one vendor | Enrichment shows Databricks stack |
-
-**If `get_timing_signals` returns zero signals for this account, return SKIP.** Do not write an email based only on fit score, leader presence, or enrichment bio. Those are not "why now."
-
-### Step 6: Draft one email (fixed structure)
-
-The email follows a rigid 4-line structure. Do not freestyle.
-
-**Line 1: Specific observation.**
-Reference one verifiable data point. A job post, a signal, a tech stack detail, a public announcement. No compliments. No assumptions. No opinions.
-
-**Line 2: Implication or risk.**
-What does that observation mean for their business? Be specific. Tie it to cost, speed, reliability, or team capacity.
-
-**Line 3: What similar companies do.**
-One sentence about how companies in a similar situation handle it. Keep it qualitative ("teams in a similar position" or "companies running Spark on [their infra]"). Do not cite specific percentages or benchmarks unless the tool output contains an approved proof point. Do not invent numbers.
-
-**Line 4: Soft question.**
-Must be a question. Must NOT ask for a meeting. Must NOT include a calendar link. Must NOT say "15 minutes." Ask whether this is something they are working on or thinking about.
-
-**Example:**
-
-> Noticed your team posted a Senior Data Engineer role focused on Spark pipeline optimization last week.
->
-> Scaling Spark pipelines on EMR without a managed layer usually means the team spends more time on infrastructure than on the data work itself.
->
-> A few teams running similar Spark workloads on AWS found that a managed acceleration layer cut their infrastructure overhead significantly.
->
-> Is pipeline performance something your team is actively working on?
-
-### Writing rules (hard bans)
-
-The email MUST NOT contain:
-- Em dashes (use commas, periods, or rewrite)
-- Buzzwords ("synergy", "leverage", "unlock", "game-changing", "cutting-edge", "revolutionary")
-- Marketing language ("we are excited", "we would love to", "I wanted to reach out")
-- Exclamation points
-- Emojis
-- "Just following up" or "I hope this finds you well"
-- "I noticed that" or "I came across" (just state the observation)
-- Compliments ("impressive growth", "love what you are doing")
-- Assumptions about pain ("I know you are struggling with")
-- Paragraphs longer than 2 sentences
-- Calendar links or specific meeting requests
-
-If you cannot write a clean email that follows all rules, return SKIP with reason "could not draft a compliant email."
+Log as skipped. Stop.
 
 ### Step 7: Post for approval
 
-Post the result in this format:
-
 ```
 **Account:** [name]
-**Fit:** [tier] | DE score: [score] | Leader: [yes/no]
-**Contact:** [name], [title]
-**Why this person:** [1 sentence]
-**Why now:** [specific data point that triggered this outreach]
-**Angle:** [chosen angle]
-**Data cited:** [the exact fact from tool output that backs the angle]
+**Fit:** [fit_summary]
+**Contact:** [contact_name], [contact_title]
+**Why this person:** [why_this_person]
+**Why now:** [trigger]
+**Angle:** [angle from plan]
+**Stage:** [outreach_stage] (touch [touch_number])
 
 ---
+
+**Subject options:**
+1. [subject 1]
+2. [subject 2]
 
 **Draft email:**
 
@@ -132,18 +96,67 @@ Post the result in this format:
 
 ---
 
+**Critic scores:**
+Specificity: [x]/5 | Relevance: [x]/5 | Brevity: [x]/5
+Human-ness: [x]/5 | Stage fit: [x]/5 | Factual safety: [x]/5
+Average: [x.x] | Rewrites: [0-2]
+
 **Next:** Approve / Revise / Skip
 ```
 
-Wait for the user to respond before taking any action.
+### Step 8: Handle user response
 
-### Step 8: Log result
+**Approve:**
+1. Call `log_outreach` with status `draft`, all fields including subject_line_1, subject_line_2, touch_number, outreach_stage
+2. Append to `/workspace/group/email-data/approved-examples.jsonl`:
+```json
+{"timestamp": "ISO", "account": "name", "contact": "name", "persona": "type", "stage": "stage", "touch": 1, "sender": "Sol", "subject_1": "...", "subject_2": "...", "email": "full text", "critic_scores": {}, "plan": {}}
+```
+3. Confirm in Slack: "Logged and saved as approved example."
 
-- On **Approve**: call `log_outreach` with status `draft` (not "approved", that's host-only), the `account_id`, `crm_contact_id`, `angle`, `why_now`, and `draft_text`. The host approval flow will promote to "approved" separately.
-- On **Skip**: call `log_outreach` with status `skipped` and a note with the skip reason.
-- On **Revise**: redraft based on feedback, post again, wait for approval.
+**Revise (with reason):**
+1. Ask for a reason code if not provided: `too vague | too long | unsupported claim | wrong persona | weak CTA | sounds AI | bad subject | other`
+2. Append to `/workspace/group/email-data/revision-log.jsonl`:
+```json
+{"timestamp": "ISO", "account": "name", "reason": "code", "feedback": "user's exact words", "original_draft": "text", "critic_scores": {}}
+```
+3. Pass the feedback to the drafter as critic feedback. Re-run critic. Post new draft.
 
-Do NOT call `enrich_contact` from this workflow. Enrichment that triggers Clay webhooks is a host-side action, not an agent action.
+**Skip:**
+1. Log as skipped with reason
+2. If user gives feedback, log to revision-log.jsonl
+
+## Training Mode (`/sdr train`)
+
+Training mode generates drafts for human review to build the approved examples library.
+
+### How it works
+
+1. Read `/workspace/group/email-data/approved-examples.jsonl` to count current examples
+2. Pick accounts that have timing signals. Use `get_timing_signals` to find 5-10 accounts with active signals.
+3. For each account, run the full workflow (research → plan → draft → critic) but do NOT log to Airtable
+4. Post each draft to Slack with the critic scores, then ask:
+
+```
+**Training draft [n/total]**
+
+[full draft output with critic scores]
+
+Rate this draft:
+:white_check_mark: Approve (saves as example)
+:pencil2: Critique (tell me what to fix)
+:x: Reject (tell me why)
+```
+
+5. On approve: save to approved-examples.jsonl
+6. On critique: save feedback to revision-log.jsonl, redraft, post again
+7. On reject: save feedback to revision-log.jsonl, move to next account
+
+Goal: build 10-20 approved examples that define Sol's voice.
+
+### Training accounts
+
+If the user says `/sdr train`, pick accounts with signals. If they say `/sdr train <account1> <account2> ...`, use those specific accounts.
 
 ## Sender Identity
 
@@ -152,42 +165,46 @@ Do NOT call `enrich_contact` from this workflow. Enrichment that triggers Clay w
 | Sol | Casual, direct. First name basis. Short sentences. |
 | Udi (CEO) | Slightly more formal. References company vision. Still concise. |
 
-Default sender is Sol unless the user specifies otherwise.
+Default is Sol. Always include sender in data passed to planner and drafter.
 
 ## What NOT to do
 
+- Do not research, plan, draft, or critique yourself. Dispatch agents.
 - Do not auto-send. Always wait for approval.
-- Do not build decks (that's v1.1).
-- Do not batch multiple accounts. One at a time.
-- Do not invent data. If a tool returns no result, say so.
-- Do not write an email without a verifiable data point backing the angle.
-- Do not send "generic DE leader intro" emails. If there is no signal, SKIP.
-- Do not use any banned words or patterns from the writing rules.
+- Do not batch accounts in standard mode. One at a time.
+- Do not call `enrich_contact`. Host-side action.
+- Do not force a draft when the critic returns KILL.
+- Do not skip the critic. Every draft gets scored.
+- Do not log to Airtable in training mode.
 
 ## Headless Mode
 
-When running headless (no `send_message` tool available, `SDR_HEADLESS=1`):
+When running headless (`SDR_HEADLESS=1`):
 
-1. Complete Steps 1-6 as normal (gather, decide, check history, pick contact, choose angle, draft).
-2. Call `log_outreach` with status `draft` immediately after drafting (do not wait for approval, there is no human in the loop yet). Include all fields: `account_id`, `crm_contact_id`, `angle`, `why_now`, `draft_text`.
-3. For SKIP: call `log_outreach` with status `skipped` and the skip reason.
-4. Skip Step 7 entirely (do not try to post to Slack).
-5. Return ONLY a single JSON object as your final message with these keys:
+1. Run full workflow through critic
+2. If SHIP: log to Airtable with status `draft`
+3. If REWRITE after 2 cycles: log best draft with status `draft_needs_review`
+4. If KILL: log with status `skipped`
+5. Return JSON:
 
 ```json
 {
-  "decision": "PROCEED or SKIP",
-  "account": "account name",
-  "fit": "tier summary",
+  "decision": "SHIP | REWRITE | KILL | SKIP | NEEDS_INFO",
+  "account": "name",
+  "fit": "summary or null",
   "contact_name": "name or null",
   "contact_title": "title or null",
-  "why_person": "1 sentence or null",
-  "why_now": "timing signal summary or null",
-  "angle": "chosen angle or null",
-  "data_cited": "exact fact backing the angle or null",
-  "draft_email": "full email text or null",
-  "skip_reason": "reason or null"
+  "why_person": "reason or null",
+  "why_now": "signal or null",
+  "angle": "angle or null",
+  "outreach_stage": "stage or null",
+  "touch_number": "integer or null",
+  "subject_line_1": "subject or null",
+  "subject_line_2": "subject or null",
+  "draft_email": "text or null",
+  "critic_scores": "scores object or null",
+  "rewrite_count": 0,
+  "skip_reason": "reason or null",
+  "needs_info": ["fields or null"]
 }
 ```
-
-Do NOT wrap the JSON in markdown code fences. Return ONLY the raw JSON object.

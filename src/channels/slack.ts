@@ -131,6 +131,45 @@ export class SlackChannel implements Channel {
         is_bot_message: isBotMessage,
       });
     });
+
+    // Slash command handler: /sdr <account>
+    // Translates slash commands into regular trigger messages so the
+    // existing message pipeline handles them identically to @mentions.
+    this.app.command('/sdr', async ({ command, ack }) => {
+      // Acknowledge within 3s (Slack requirement)
+      await ack();
+
+      const jid = `slack:${command.channel_id}`;
+      const timestamp = new Date().toISOString();
+      const senderName = await this.resolveUserName(command.user_id) || command.user_name || 'unknown';
+      const args = command.text?.trim() || '';
+
+      // Post visible echo so the channel has a record of what was requested
+      try {
+        await this.app.client.chat.postMessage({
+          channel: command.channel_id,
+          text: `_${senderName} ran \`/sdr ${args}\`_`,
+        });
+      } catch (err) {
+        logger.warn({ err }, 'Failed to post slash command echo');
+      }
+
+      // Inject as a trigger message: "@Andy /sdr <args>"
+      const content = `@${ASSISTANT_NAME} /sdr ${args}`;
+
+      this.opts.onMessage(jid, {
+        id: `cmd-${Date.now()}`,
+        chat_jid: jid,
+        sender: command.user_id,
+        sender_name: senderName,
+        content,
+        timestamp,
+        is_from_me: false,
+        is_bot_message: false,
+      });
+
+      logger.info({ channel: command.channel_id, user: command.user_id, args }, 'Slash command /sdr received');
+    });
   }
 
   async connect(): Promise<void> {
