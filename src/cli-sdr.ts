@@ -73,9 +73,30 @@ Execute this workflow in order. Stop early if the gate fails.
 Step 1: Call get_account_score for "${account}".
 Step 2: Call get_timing_signals for the account. If ZERO signals, SKIP immediately. Do not proceed to later steps.
 Step 3: Call get_best_contacts for the account.
-Step 4: Pick the best contact and angle based on the data.
-Step 5: Draft a 4-line email.
+Step 4: Pick the best contact and angle based on the data. The angle MUST cite a timing signal, not just fit data.
+Step 5: Draft a 4-line email following the structure and rules below.
 Step 6: ${logInstruction}
+
+EMAIL STRUCTURE (exactly 4 lines, no subject line):
+Line 1: Specific observation. Reference one verifiable data point (a job post, signal, tech detail, public announcement). No compliments. No assumptions.
+Line 2: Implication or risk. What does that observation mean for their business? Tie to cost, speed, reliability, or team capacity.
+Line 3: What similar companies do. One sentence about how companies in a similar situation handle it. Do NOT cite specific percentages or benchmarks unless the tool output contains them. Do NOT invent numbers.
+Line 4: Soft question. Must be a question. Must NOT ask for a meeting. Must NOT say "15 minutes" or "20 minutes" or any time. No calendar links. Ask whether this is something they are working on or thinking about.
+
+HARD BANS (the email MUST NOT contain any of these):
+- Em dashes (use commas, periods, or rewrite the sentence)
+- Buzzwords ("synergy", "leverage", "unlock", "game-changing", "cutting-edge", "revolutionary")
+- Marketing language ("we are excited", "we would love to", "I wanted to reach out")
+- Exclamation points or emojis
+- "Just following up" or "I hope this finds you well"
+- "I noticed that" or "I came across" (just state the observation directly)
+- Compliments ("impressive growth", "love what you are doing")
+- Assumptions about pain ("I know you are struggling with")
+- Paragraphs longer than 2 sentences
+- Calendar links or specific meeting requests
+- Invented statistics or percentages not from tool output
+
+If you cannot write a clean email that follows all rules, return SKIP with reason "could not draft a compliant email."
 
 Your final message MUST be a single raw JSON object (no markdown fences):
 {
@@ -88,7 +109,7 @@ Your final message MUST be a single raw JSON object (no markdown fences):
   "why_now": "<timing signal summary or null>",
   "angle": "<chosen angle or null>",
   "data_cited": "<exact fact backing the angle or null>",
-  "draft_email": "<full email text or null>",
+  "draft_email": "<full 4-line email text or null>",
   "skip_reason": "<reason or null>"
 }`;
 

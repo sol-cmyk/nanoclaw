@@ -358,9 +358,17 @@ export async function ensureMcpRunning(): Promise<void> {
     `network connect ${MCP_EGRESS_NETWORK} ${MCP_CONTAINER_NAME}`,
   );
 
+  // Connect to egress network so sidecar can reach Docker host (Postgres via SSH tunnel).
+  // The MCP sidecar is trusted code — the security boundary is agent→MCP, not MCP→host.
+  if (postgresDsn) {
+    await dockerExec(
+      `network connect ${EGRESS_NETWORK} ${MCP_CONTAINER_NAME}`,
+    );
+  }
+
   logger.info(
     { container: MCP_CONTAINER_NAME, port: MCP_PORT },
-    `MCP sidecar started (${CONTROL_NETWORK} + ${MCP_EGRESS_NETWORK})`,
+    `MCP sidecar started (${CONTROL_NETWORK} + ${MCP_EGRESS_NETWORK}${postgresDsn ? ' + ' + EGRESS_NETWORK : ''})`,
   );
 }
 

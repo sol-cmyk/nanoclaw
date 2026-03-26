@@ -115,12 +115,27 @@ class PostgresBackend:
     # ------------------------------------------------------------------
 
     def resolve_account_id(self, account_ref: str) -> tuple[int | None, str | None, str | None]:
-        """Resolve account ref (name, key, or id) to (db_id, name_key, display_name)."""
+        """Resolve account ref (name, key, id, or Airtable record ID) to (db_id, name_key, display_name)."""
         key = _normalize_key(account_ref)
         row = self._ro_one("SELECT id, name_key, name FROM accounts WHERE name_key = %s", (key,))
         if row:
             return row["id"], row["name_key"], row["name"]
-        # Try partial match
+
+        # Try Airtable record ID via external_refs (agent often passes these)
+        if account_ref.startswith("rec"):
+            ref_row = self._ro_one("""
+                SELECT a.id, a.name_key, a.name
+                FROM external_refs er
+                JOIN accounts a ON a.id = er.entity_id
+                WHERE er.external_id = %s
+                  AND er.system = 'airtable'
+                  AND er.entity_type = 'account'
+                LIMIT 1
+            """, (account_ref,))
+            if ref_row:
+                return ref_row["id"], ref_row["name_key"], ref_row["name"]
+
+        # Try partial match on name
         rows = self._ro(
             "SELECT id, name_key, name FROM accounts WHERE name_key LIKE %s LIMIT 3",
             (f"%{key}%",),
@@ -199,8 +214,18 @@ class PostgresBackend:
             for c in contacts
         ]
 
+    _ACTIONABLE_SIGNAL_TYPES = [
+        'buying_signal', 'ecosystem_shift', 'competitive_move',
+        'community_signal', 'job_posting', 'product_launch',
+        'competitive_campaign', 'project_milestone',
+    ]
+
     def get_timing_signals(self, account_ref: str, limit: int = 5) -> list[dict[str, Any]]:
-        """Get timing signals for an account."""
+        """Get timing signals for an account.
+
+        Filters to actionable signal types only (excludes channel_status
+        and other health-check signals that are not outreach triggers).
+        """
         db_id, _, _ = self.resolve_account_id(account_ref)
         if not db_id:
             return []
@@ -210,10 +235,11 @@ class PostgresBackend:
                    why_it_matters, signal_score, detected_at
             FROM account_signals
             WHERE account_id = %s
+              AND signal_type = ANY(%s)
               AND (freshness_status IS NULL OR freshness_status != 'expired')
             ORDER BY detected_at DESC NULLS LAST
             LIMIT %s
-        """, (db_id, max(1, min(limit, 10))))
+        """, (db_id, self._ACTIONABLE_SIGNAL_TYPES, max(1, min(limit, 10))))
 
         return [
             {
@@ -222,6 +248,7 @@ class PostgresBackend:
                 "observed_at": s["detected_at"].isoformat() if s.get("detected_at") else None,
                 "score": float(s["signal_score"]) if s.get("signal_score") else None,
                 "source": s["signal_source"],
+                "why_it_matters": s.get("why_it_matters"),
             }
             for s in signals
         ]
@@ -310,8 +337,8 @@ class PostgresBackend:
             self._execute("""
                 INSERT INTO outreach_events (
                     account_id, contact_id, channel, direction, subject,
-                    status, sent_at, source, metadata
-                ) VALUES (%s, %s, 'email', 'outbound', %s, %s, NOW(), 'nanoclaw', %s)
+                    status, source, metadata
+                ) VALUES (%s, %s, 'email', 'outbound', %s, %s, 'nanoclaw', %s)
             """, (
                 db_id, cid, angle, status,
                 json.dumps({
