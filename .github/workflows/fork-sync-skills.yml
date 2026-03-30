@@ -25,8 +25,13 @@ jobs:
     if: github.repository != 'qwibitai/nanoclaw'
     runs-on: ubuntu-latest
     steps:
+      # Use GitHub App token if secrets are configured, otherwise fall back to GITHUB_TOKEN.
+      # Without App token, pushes that include .github/workflows/ changes will fail
+      # (GitHub requires 'workflows' permission for that). Add APP_ID + APP_PRIVATE_KEY
+      # secrets to enable full upstream sync including workflow file changes.
       - uses: actions/create-github-app-token@v1
         id: app-token
+        continue-on-error: true
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -34,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - uses: actions/setup-node@v4
         with:
