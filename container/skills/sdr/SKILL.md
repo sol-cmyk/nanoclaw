@@ -156,7 +156,7 @@ Goal: build 10-20 approved examples that define Sol's voice.
 
 ### Training accounts
 
-If the user says `/sdr train`, pick accounts with signals. If they say `/sdr train <account1> <account2> ...`, use those specific accounts.
+If the user says `/sdr train`, pick accounts with signals. If they say `/sdr train <account1>, <account2>, ...` (comma-separated), use those specific accounts. Split on commas and trim whitespace.
 
 ## Sender Identity
 
