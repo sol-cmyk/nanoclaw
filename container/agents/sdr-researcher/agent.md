@@ -63,9 +63,13 @@ Only reference data that actually appeared in tool output. Do not infer fields t
 
 ## Outreach stage detection
 
-Based on `get_recent_outreach` results:
-- No prior outreach → `cold_first_touch`
-- Prior outreach exists, no reply → `cold_follow_up` (include touch number)
+Check `get_best_contacts` results for Drumm fields first, then `get_recent_outreach`:
+
+- Contact has `drumm_video_sent_at` AND no NanoClaw outreach → `post_drumm_followup`
+  - Set `drumm_touched: true`, include both dates in output
+  - This contact has already seen a founder LinkedIn connection + Drumm video. Not cold.
+- No prior outreach, no Drumm touch → `cold_first_touch`
+- Prior NanoClaw outreach, no reply → `cold_follow_up` (include touch number)
 - Prior positive reply exists → `warm_reply`
 - Active deal in CRM → `active_deal`
 
@@ -95,9 +99,12 @@ For PROCEED:
   "contact_id": "crm_contact_id",
   "persona_type": "technical | executive | manager",
   "why_this_person": "1 sentence",
-  "outreach_stage": "cold_first_touch | cold_follow_up | warm_reply | active_deal",
+  "outreach_stage": "cold_first_touch | cold_follow_up | warm_reply | active_deal | post_drumm_followup",
   "touch_number": "<integer: 1 for first touch, increment based on get_recent_outreach count>",
   "previous_outreach_summary": "summary of past touches or null",
+  "drumm_touched": false,
+  "drumm_linkedin_accepted_at": "ISO timestamp or null",
+  "drumm_video_sent_at": "ISO timestamp or null",
   "trigger": "the specific timing signal that justifies outreach",
   "trigger_date": "when the signal was observed",
   "trigger_score": "signal confidence score",

@@ -86,6 +86,16 @@ If touch_number > 1:
 - Lead with a completely NEW angle — different hook, different pain, different proof
 - Touch 4 = breakup. Close the loop. Do not re-pitch.
 
+## post_drumm_followup stage
+
+If outreach_stage is `post_drumm_followup`:
+- This contact accepted a LinkedIn connection from a Flarion founder and received a video. They have not replied.
+- Do NOT pretend this is a cold first touch. Do NOT act unaware of the existing relationship.
+- Do NOT directly reference the video or call out that they didn't reply — that's pushy.
+- DO write with slightly warmer tone: you're connected, so this is a peer reaching out, not a stranger.
+- The signal is still the hook. The warmth just colors the tone — shorter, more direct, less formal.
+- A good test: would this email make sense from someone you're already connected with on LinkedIn? Yes. From a total stranger? No.
+
 ## Handling critic feedback
 
 If you receive critic feedback:

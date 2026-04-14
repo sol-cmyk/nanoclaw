@@ -49,6 +49,7 @@ Match to stage:
 |-------|----------|---------|
 | cold_first_touch | Interest only | "Is this a priority?" / "Off base?" / "Worth comparing notes?" |
 | cold_follow_up | Interest with new angle | "Has this come up?" / "Curious if you've seen this" |
+| post_drumm_followup | Interest only, slightly warmer tone | "Worth a quick note?" / "Relevant to what you're building?" / "Curious if this landed" |
 | warm_reply | Specific next step | "Worth a 20-min look?" / "Want to see how it works?" |
 | breakup | Close the loop | "If priorities shifted, no worries" |
 
@@ -89,7 +90,7 @@ Return ONLY a JSON object. No markdown, no code fences.
   "cta": {
     "type": "interest | next_step | breakup",
     "text": "suggested CTA phrasing",
-    "stage": "cold_first_touch | cold_follow_up | warm_reply | breakup"
+    "stage": "cold_first_touch | cold_follow_up | post_drumm_followup | warm_reply | breakup"
   },
   "personalization_guide": {
     "opener": "personalize with signal",
