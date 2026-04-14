@@ -43,6 +43,7 @@ If decision = PROCEED: continue.
 
 Before passing to the planner, add these fields to the research record:
 - `sender`: "Sol" (default) or "Udi" if user specified
+- `company_context`: read from `/workspace/group/company-context.md` — what Flarion is, what it is NOT, approved language, banned language, and qualitative patterns. Pass the full file contents.
 - `approved_proof_points`: read from `/workspace/group/email-data/proof-points.md`
 - `approved_examples`: read last 5 entries from `/workspace/group/email-data/approved-examples.jsonl` (may be empty early on)
 
@@ -56,13 +57,13 @@ Pass the plan + enriched research record + approved examples to `sdr-email-draft
 
 ### Step 5: Dispatch critic
 
-Pass the draft + plan + research record to `sdr-email-critic`. It returns scores and a decision.
+Pass the draft + plan + research record + `company_context` to `sdr-email-critic`. It returns scores and a decision.
 
 ### Step 6: Handle critic decision
 
 **SHIP**: Continue to Step 7.
 
-**REWRITE** (max 2 cycles): Pass the critic's `rewrite_instructions` + original plan + research back to the drafter. Then re-run the critic on the new draft. If it ships after rewrite, continue. If still REWRITE after 2 cycles, post both versions to Slack and let the human choose.
+**REWRITE** (max 2 cycles): Pass the critic's `rewrite_instructions` + original plan + research back to the drafter. Then re-run the critic on the new draft (include `company_context`). If it ships after rewrite, continue. If still REWRITE after 2 cycles, post both versions to Slack and let the human choose.
 
 **KILL**: Post to Slack:
 ```
@@ -98,7 +99,7 @@ Log as skipped. Stop.
 
 **Critic scores:**
 Specificity: [x]/5 | Relevance: [x]/5 | Brevity: [x]/5
-Human-ness: [x]/5 | Stage fit: [x]/5 | Factual safety: [x]/5
+Human-ness: [x]/5 | Stage fit: [x]/5 | Factual safety: [x]/5 | Positioning: [x]/5
 Average: [x.x] | Rewrites: [0-2]
 
 **Next:** Approve / Revise / Skip

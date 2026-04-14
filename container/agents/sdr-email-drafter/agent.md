@@ -12,6 +12,7 @@ You receive:
 - A **plan** (hook, pain, proof, CTA, personalization guide, word target, tone notes)
 - The **research record** (account, contact, persona, stage, trigger, context)
 - The **sender** (Sol or Udi)
+- **company_context**: what Flarion is, what it is NOT, approved language, and banned language. Read this before writing. Never describe Flarion in a way that contradicts it.
 - Optionally: **critic feedback** from a previous draft (fix only what the critic flagged)
 - Optionally: **approved examples** to match voice and tone
 
