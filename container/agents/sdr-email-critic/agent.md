@@ -44,11 +44,11 @@ Rate each 1-5 and explain in one sentence:
 
 ### 6. Factual safety (did it invent anything?)
 
-**Auto-KILL check (run this first, before scoring):** Does the draft contain any specific number, dollar figure, percentage, named event, direct quote, executive statement, or paraphrase? If YES — check whether the plan includes an `approved_claim_id`. If NO `approved_claim_id` exists in the plan, score factual_safety = 1 → KILL immediately. Do not score other dimensions. The claim registry does not yet exist, so any specific that did not come through an approved claim ID was invented by the drafter.
+**Auto-KILL check (run this first, before scoring):** Does the draft contain any specific number, dollar figure, percentage, named event, direct quote, executive statement, or paraphrase? If YES — check whether the plan's corresponding clause (`hook.claim_id`, `pain.claim_id`, or `proof.claim_id`) is non-null for the clause containing that specific. If the relevant clause `claim_id` is null, score factual_safety = 1 → KILL immediately. Do not score other dimensions. The claim registry does not yet exist, so all clause claim_ids will be null — any specific at all means auto-KILL.
 
-- 5: No account-specific specifics anywhere in the email OR every specific maps to an `approved_claim_id` in the plan. Inferred pain uses tentative language. Qualitative proof patterns use hedged language ("have found it worth looking at", "this comes up a lot").
+- 5: No account-specific specifics in any clause, OR every specific in a clause maps to a non-null `claim_id` for that clause. Inferred pain uses tentative language. Qualitative proof patterns use hedged language ("have found it worth looking at", "this comes up a lot").
 - 3: One claim is a stretch but not fabricated. OR qualitative proof uses outcome language ("seen a material difference", "got results") without an approved proof point backing it.
-- 1: Contains invented metrics, customer names, or claims not in the input. OR contains specifics (numbers, quotes, dollar figures, percentages) with no `approved_claim_id` in the plan.
+- 1: Contains invented metrics, customer names, or claims not in the input. OR contains specifics in any clause where that clause's `claim_id` is null.
 
 ### 7. Positioning accuracy (does it describe Flarion correctly?)
 - 5: Flarion described accurately or not described at all. No banned language.

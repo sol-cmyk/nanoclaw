@@ -36,7 +36,7 @@ PROCEED if timing signals exist. The signal is the trigger. Fit data and contact
 
 **What counts as a timing signal:** job postings, buying signals, competitive intel, earnings mentions, funding events, leadership changes. These indicate "why now."
 
-**What does NOT count:** Technographic data (e.g., "HG Insights: Apache Spark") and channel_status signals are context, not timing. An account that only has technographic signals should SKIP. The same goes for job postings where `is_spark_role: false` and `is_buying_signal: false` — a generic backend engineer hire is not a Spark timing signal. The `get_timing_signals` response now includes `is_spark_role`, `is_buying_signal`, and `is_de_role` fields for each signal — check these before treating a job_posting signal as an outreach trigger. If all three are false or null for a job posting, treat it as context, not timing.
+**What does NOT count:** Technographic data (e.g., "HG Insights: Apache Spark") and channel_status signals are context, not timing. An account that only has technographic signals should SKIP. The `get_timing_signals` response includes an `actionable_trigger` boolean for each signal. For job postings, `actionable_trigger: false` means it's a generic hire with no Spark/DE signal — treat it as context only, not an outreach trigger. Do not reinterpret the raw `is_spark_role`/`is_buying_signal`/`is_de_role` flags yourself — the backend already computed the verdict. If every signal has `actionable_trigger: false`, SKIP.
 
 ## Contact selection
 

@@ -45,7 +45,7 @@ Before passing to the planner, add these fields to the research record:
 - `sender`: "Sol" (default) or "Udi" if user specified
 - `company_context`: read from `/workspace/group/company-context.md` — what Flarion is, what it is NOT, approved language, banned language, and qualitative patterns. Pass the full file contents.
 - `approved_proof_points`: read from `/workspace/group/email-data/proof-points.md`
-- `approved_examples`: read last 5 entries from `/workspace/group/email-data/approved-examples.jsonl` (may be empty early on)
+- `approved_examples`: read last 5 entries from `/workspace/group/email-data/approved-examples.jsonl` where `demo_only` is not `true`. Filter before passing — demo_only entries are contaminated training data and must not reach the drafter. If all entries are demo_only, pass an empty list.
 
 ### Step 3: Dispatch planner
 
@@ -104,7 +104,7 @@ Log as skipped. Stop.
 - [evidence_url 2]
 - ...
 
-If the draft contains specific numbers, quotes, named events, or dollar figures and there are no source URLs above, REJECT — that means the drafter invented something.
+**Until the claim registry exists: any account-specific specific (number, dollar figure, percentage, named event, direct quote, exec paraphrase) = REJECT immediately.** Source URLs are for verifying the signal type used as hook, not for unlocking specifics. An email that cites "$20K" with a valid source URL is still a reject. The only safe path is generic qualitative language.
 
 ---
 

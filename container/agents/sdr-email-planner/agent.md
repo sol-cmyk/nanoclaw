@@ -78,18 +78,20 @@ Return ONLY a JSON object. No markdown, no code fences.
   "hook": {
     "type": "signal | hypothesis | initiative",
     "text": "the specific observation to lead with",
-    "source": "which tool/field this came from"
+    "source": "which tool/field this came from",
+    "claim_id": null
   },
   "pain": {
     "text": "the single pain hypothesis",
     "verified": true,
     "tentative_language_required": false,
-    "reason": "why this pain connects to the hook"
+    "reason": "why this pain connects to the hook",
+    "claim_id": null
   },
   "proof": {
     "text": "the proof point or qualitative pattern",
     "source": "approved_proof_point | qualitative_pattern",
-    "approved_id": "proof point ID if from approved list, else null"
+    "claim_id": null
   },
   "cta": {
     "type": "interest | next_step | breakup",
