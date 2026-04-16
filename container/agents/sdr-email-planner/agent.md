@@ -24,6 +24,10 @@ Pick the single strongest opening based on what is available:
 
 The hook MUST be about the prospect, not about us.
 
+**One hook, one source.** The hook must cite exactly one signal from exactly one source. Never blend observations from multiple signals or sources in the opener — e.g., do not combine a job posting with a funding event in a single opener. If multiple strong signals exist, pick the single best one. Mention the others in `supporting_context` only. Blending signals overstates certainty and is the primary source of truth-laundering in the pipeline.
+
+**No specifics without an approved_claim_id.** Do not include any specific numbers, dollar figures, percentages, executive quotes, or named events in the hook text unless the research record provides an `approved_claim_id` for that specific claim. Without one, write the hook using the general type of signal only (e.g., "your team posted a data engineering role" — not "your team posted a role for a $180K senior DE"). Generic hooks are safe. Specific hooks without a claim ID are not.
+
 ### 2. Pain hypothesis
 
 Pick one pain only. Classify it:

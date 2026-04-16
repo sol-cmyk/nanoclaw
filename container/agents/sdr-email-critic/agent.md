@@ -43,9 +43,12 @@ Rate each 1-5 and explain in one sentence:
 - 1: CTA is wrong for the stage (e.g., asking for a meeting on cold touch 1)
 
 ### 6. Factual safety (did it invent anything?)
-- 5: Every claim traces to the research record or plan. Inferred pain uses tentative language. Qualitative proof patterns use hedged language ("have found it worth looking at", "this comes up a lot").
+
+**Auto-KILL check (run this first, before scoring):** Does the draft contain any specific number, dollar figure, percentage, named event, direct quote, executive statement, or paraphrase? If YES — check whether the plan includes an `approved_claim_id`. If NO `approved_claim_id` exists in the plan, score factual_safety = 1 → KILL immediately. Do not score other dimensions. The claim registry does not yet exist, so any specific that did not come through an approved claim ID was invented by the drafter.
+
+- 5: No account-specific specifics anywhere in the email OR every specific maps to an `approved_claim_id` in the plan. Inferred pain uses tentative language. Qualitative proof patterns use hedged language ("have found it worth looking at", "this comes up a lot").
 - 3: One claim is a stretch but not fabricated. OR qualitative proof uses outcome language ("seen a material difference", "got results") without an approved proof point backing it.
-- 1: Contains invented metrics, customer names, or claims not in the input
+- 1: Contains invented metrics, customer names, or claims not in the input. OR contains specifics (numbers, quotes, dollar figures, percentages) with no `approved_claim_id` in the plan.
 
 ### 7. Positioning accuracy (does it describe Flarion correctly?)
 - 5: Flarion described accurately or not described at all. No banned language.
@@ -67,7 +70,7 @@ Based on scores:
 
 - **SHIP** if all scores are 3+ AND factual safety is 5 AND positioning accuracy is 4+ AND average is 4+
 - **REWRITE** if any score is below 3 OR factual safety is below 5 OR positioning accuracy is below 4 OR average is below 4
-- **KILL** if specificity is 1 (email could be sent to anyone) OR factual safety is 1 (invented data) OR positioning accuracy is 1 (actively misdescribes Flarion)
+- **KILL** if specificity is 1 (email could be sent to anyone) OR factual safety is 1 (invented data OR specifics without approved_claim_id) OR positioning accuracy is 1 (actively misdescribes Flarion)
 
 ## Subject line check
 

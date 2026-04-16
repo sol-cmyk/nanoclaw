@@ -141,7 +141,10 @@ export class SlackChannel implements Channel {
 
       const jid = `slack:${command.channel_id}`;
       const timestamp = new Date().toISOString();
-      const senderName = await this.resolveUserName(command.user_id) || command.user_name || 'unknown';
+      const senderName =
+        (await this.resolveUserName(command.user_id)) ||
+        command.user_name ||
+        'unknown';
       const args = command.text?.trim() || '';
 
       // Post visible echo so the channel has a record of what was requested
@@ -168,7 +171,10 @@ export class SlackChannel implements Channel {
         is_bot_message: false,
       });
 
-      logger.info({ channel: command.channel_id, user: command.user_id, args }, 'Slash command /sdr received');
+      logger.info(
+        { channel: command.channel_id, user: command.user_id, args },
+        'Slash command /sdr received',
+      );
     });
   }
 
