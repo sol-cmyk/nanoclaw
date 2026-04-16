@@ -115,6 +115,7 @@ For PROCEED:
   "trigger": "the specific timing signal that justifies outreach",
   "trigger_date": "when the signal was observed",
   "trigger_score": "signal confidence score",
+  "evidence_urls": ["the source URLs from the signal so the human reviewer can verify any specific claim — pass through every URL the signal returned, do not summarize or filter"],
   "angle": "chosen angle in 1 sentence",
   "pain_hypothesis": "inferred pain tied to the signal",
   "supporting_context": "fit data, infra details, team size that strengthens the angle",

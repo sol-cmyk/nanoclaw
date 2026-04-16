@@ -103,6 +103,7 @@ Return ONLY a JSON object. No markdown, no code fences.
     "max": 80,
     "reason": "touch 1 cold"
   },
-  "tone_notes": "any specific tone guidance for this persona/sender combo"
+  "tone_notes": "any specific tone guidance for this persona/sender combo",
+  "evidence_urls": ["pass through every evidence URL from the research record so the human reviewer can spot-check any specific claim referenced in the hook or pain"]
 }
 ```

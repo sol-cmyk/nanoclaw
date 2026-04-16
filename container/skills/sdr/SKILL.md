@@ -55,6 +55,8 @@ Pass the enriched research record to `sdr-email-planner`. It returns a plan (hoo
 
 Pass the plan + enriched research record + approved examples to `sdr-email-drafter`. It returns a draft with subject lines and word count.
 
+The drafter must NOT put URLs in the email body. URLs flow to the human approval message in Step 7 instead, so the reviewer can verify claims without the prospect seeing source links.
+
 ### Step 5: Dispatch critic
 
 Pass the draft + plan + research record + `company_context` to `sdr-email-critic`. It returns scores and a decision.
@@ -94,6 +96,15 @@ Log as skipped. Stop.
 **Draft email:**
 
 [email text]
+
+---
+
+**Sources to verify** (every specific claim in the email above traces back to one of these — click before approving):
+- [evidence_url 1]
+- [evidence_url 2]
+- ...
+
+If the draft contains specific numbers, quotes, named events, or dollar figures and there are no source URLs above, REJECT — that means the drafter invented something.
 
 ---
 
