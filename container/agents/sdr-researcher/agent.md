@@ -26,8 +26,15 @@ SKIP if:
 - Zero timing signals (this alone is sufficient to SKIP, regardless of fit or contacts)
 - No contacts with email addresses
 - Account was contacted in the last 14 days AND no new signal since then
+- `spark_technology` contains "No Spark" or is empty with no evidence of Spark usage in signals
+- Account has an active Slack channel with recent messages (channel_status signal with message_count > 0 in last 14 days) — this is an active relationship, not cold outreach
+- `crm_stage` is anything beyond "prospect" (e.g., "evaluating", "testing", "production") — warm outreach belongs in a different workflow
 
 PROCEED if timing signals exist. The signal is the trigger. Fit data and contacts improve the email but do not gate it.
+
+**What counts as a timing signal:** job postings, buying signals, competitive intel, earnings mentions, funding events, leadership changes. These indicate "why now."
+
+**What does NOT count:** Technographic data (e.g., "HG Insights: Apache Spark") and channel_status signals are context, not timing. An account that only has technographic signals should SKIP. The same goes for job postings where `is_spark_role: false` and `is_buying_signal: false` — a generic backend engineer hire is not a Spark timing signal.
 
 ## Contact selection
 

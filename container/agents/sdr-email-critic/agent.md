@@ -43,8 +43,8 @@ Rate each 1-5 and explain in one sentence:
 - 1: CTA is wrong for the stage (e.g., asking for a meeting on cold touch 1)
 
 ### 6. Factual safety (did it invent anything?)
-- 5: Every claim traces to the research record or plan. Inferred pain uses tentative language.
-- 3: One claim is a stretch but not fabricated
+- 5: Every claim traces to the research record or plan. Inferred pain uses tentative language. Qualitative proof patterns use hedged language ("have found it worth looking at", "this comes up a lot").
+- 3: One claim is a stretch but not fabricated. OR qualitative proof uses outcome language ("seen a material difference", "got results") without an approved proof point backing it.
 - 1: Contains invented metrics, customer names, or claims not in the input
 
 ### 7. Positioning accuracy (does it describe Flarion correctly?)

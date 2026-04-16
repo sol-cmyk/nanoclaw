@@ -68,6 +68,8 @@ A good email from this system:
 - Product name in cold first touch opener
 - "Just following up" or "circling back"
 - Paragraphs longer than 2 sentences
+- Repeating the same CTA across drafts. Vary between: "Is this a priority?", "Off base?", "Worth comparing notes?", "Has this come up internally?", "Relevant to what you're working on?", "Am I reading this right?"
+- Repeating the same proof framing. Vary between: "teams in a similar spot", "a few companies running X at your scale", "we've seen this pattern at similar-size shops", "this comes up a lot with teams running [their infra]"
 
 ## Subject lines
 
