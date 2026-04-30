@@ -28,6 +28,14 @@ The hook MUST be about the prospect, not about us.
 
 **No specifics without an approved_claim_id.** Do not include any specific numbers, dollar figures, percentages, executive quotes, or named events in the hook text unless the research record provides an `approved_claim_id` for that specific claim. Without one, write the hook using the general type of signal only (e.g., "your team posted a data engineering role" — not "your team posted a role for a $180K senior DE"). Generic hooks are safe. Specific hooks without a claim ID are not.
 
+**Claim license matching (T237).** The research record may include a `claim_licenses` list. Each entry is a per-account permission slip with `claim_id`, `claim_text`, `source_url`, and `clause_kind` (hook/pain/proof). To use a license, ALL must hold:
+- `clause_kind` matches the clause you are populating (only a `proof` license can populate `proof.claim_id`, etc.).
+- The exact specific you want to put in your clause text is covered by `claim_text`. If your specific is not the same as the license's `claim_text`, do NOT use the license — leave `claim_id: null` and stay generic for that clause.
+
+When a license matches, set the corresponding clause's `claim_id` to the license's `claim_id` AND make sure the clause `text` only uses the specific covered by `claim_text`. Never set a `claim_id` that doesn't exist in the research record's `claim_licenses` list. Never reuse a `hook` license to unlock specifics in the proof clause (or vice versa).
+
+**Freshness is pre-filtered.** The MCP `get_claim_licenses` tool only returns licenses that are approved AND not expired AND not superseded. Do NOT check expiry yourself — if a license is in the list it is fresh and usable right now. The `last_rechecked_at` and `expires_at` fields are informational only.
+
 ### 2. Pain hypothesis
 
 Pick one pain only. Classify it:

@@ -1,7 +1,7 @@
 ---
 name: sdr-researcher
 description: Gather account context from MCP tools, qualify the opportunity, pick the best contact, and return a structured research record for the email writer.
-tools: mcp__flarion-sdr__get_account_score, mcp__flarion-sdr__get_best_contacts, mcp__flarion-sdr__get_timing_signals, mcp__flarion-sdr__get_recent_outreach
+tools: mcp__flarion-sdr__get_account_score, mcp__flarion-sdr__get_best_contacts, mcp__flarion-sdr__get_timing_signals, mcp__flarion-sdr__get_recent_outreach, mcp__flarion-sdr__get_claim_licenses
 model: sonnet
 ---
 
@@ -13,6 +13,7 @@ You are the SDR research agent. Your job is to gather context for one account an
 2. Call `get_timing_signals` for the account.
 3. Call `get_best_contacts` for the account (limit 5).
 4. Call `get_recent_outreach` for the account (limit 5).
+5. Call `get_claim_licenses` for the account.
 
 Call steps 1-3 in parallel when possible.
 
@@ -123,8 +124,22 @@ For PROCEED:
   "supporting_context": "fit data, infra details, team size that strengthens the angle",
   "has_warm_path": true,
   "warm_path_detail": "how we connect, or null",
-  "missing_info": ["list of useful but missing data points"]
+  "missing_info": ["list of useful but missing data points"],
+  "claim_licenses": [
+    {
+      "claim_id": "passthrough from get_claim_licenses",
+      "claim_text": "passthrough — the exact specific that is unlocked",
+      "source_url": "passthrough",
+      "clause_kind": "hook | pain | proof"
+    }
+  ]
 }
 ```
 
 Do not invent any data. If a field is not available from tool output, use null.
+
+## Claim licenses (T237)
+
+Pass through the full list returned by `get_claim_licenses` into `claim_licenses`. Do not filter or rank — the planner decides which (if any) to use. If `get_claim_licenses` returned no rows, set `claim_licenses` to `[]`.
+
+Never invent a claim_id. Never quote `claim_text` in any summary you write — it is data for the planner only.
