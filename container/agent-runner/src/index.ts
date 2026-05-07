@@ -578,10 +578,11 @@ async function main(): Promise<void> {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     log(`Agent error: ${errorMessage}`);
+    const sessionNotFound = errorMessage.includes('No conversation found');
     writeOutput({
       status: 'error',
       result: null,
-      newSessionId: sessionId,
+      newSessionId: sessionNotFound ? undefined : sessionId,
       error: errorMessage
     });
     process.exit(1);
