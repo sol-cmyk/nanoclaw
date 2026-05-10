@@ -120,11 +120,16 @@ Average: [x.x] | Rewrites: [0-2]
 
 **Approve:**
 1. Call `log_outreach` with status `draft`, all fields including subject_line_1, subject_line_2, touch_number, outreach_stage
-2. Append to `/workspace/group/email-data/approved-examples.jsonl`:
+2. Decide which exemplar bucket the draft belongs to:
+   - **signal-anchored** → `/workspace/group/email-data/approved-examples.jsonl`. Use this when the draft cites a verified specific anchor: a claim license, a verified signal with source URL, a public earnings/job-posting/blog quote that the researcher tagged as the trigger. Indicators: `plan.hook_type == "signal"` AND `plan.proof_source` references a verified source (e.g. `claim_license`, `verified_signal`, named public URL).
+   - **qualitative-only** → `/workspace/group/email-data/generic-safe-examples.jsonl`. Use this when the draft relies on pattern language without a concrete verified anchor. Indicators: `plan.proof_source == "qualitative_pattern"`, no claim license referenced, the email talks in generalities (e.g. "teams running Spark at your scale"). Create the file on first write if it does not exist.
+3. Append the entry to whichever file was chosen, including `anchor_type`:
 ```json
-{"timestamp": "ISO", "account": "name", "contact": "name", "persona": "type", "stage": "stage", "touch": 1, "sender": "Sol", "subject_1": "...", "subject_2": "...", "email": "full text", "critic_scores": {}, "plan": {}}
+{"timestamp": "ISO", "account": "name", "contact": "name", "persona": "type", "stage": "stage", "touch": 1, "sender": "Sol", "subject_1": "...", "subject_2": "...", "email": "full text", "critic_scores": {}, "plan": {}, "anchor_type": "signal_anchored | qualitative_only"}
 ```
-3. Confirm in Slack: "Logged and saved as approved example."
+4. Confirm in Slack: "Logged and saved as `<signal-anchored|qualitative-only>` example."
+
+The drafter only reads `approved-examples.jsonl` for voice training (Step 2). Qualitative-only exemplars are kept in a separate file so the drafter never learns it is safe to invent specifics from a pattern-only example.
 
 **Revise (with reason):**
 1. Ask for a reason code if not provided: `too vague | too long | unsupported claim | wrong persona | weak CTA | sounds AI | bad subject | other`
@@ -160,7 +165,7 @@ Rate this draft:
 :x: Reject (tell me why)
 ```
 
-5. On approve: save to approved-examples.jsonl
+5. On approve: save to the bucket chosen by the same split rule as Step 8 — `approved-examples.jsonl` for signal-anchored drafts, `generic-safe-examples.jsonl` for qualitative-only drafts. Include `anchor_type` in the entry.
 6. On critique: save feedback to revision-log.jsonl, redraft, post again
 7. On reject: save feedback to revision-log.jsonl, move to next account
 
