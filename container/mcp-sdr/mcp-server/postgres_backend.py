@@ -155,8 +155,10 @@ class PostgresBackend:
             return None
 
         acct = self._ro_one("SELECT * FROM accounts WHERE id = %s", (db_id,))
+        # tier_v2 = canonical ICP fit tier (v1 `tier`/`score` deprecated, dropped in
+        # cockpit mig 101/102). fit_score (0-1) is the v2 numeric paired with tier_v2.
         fit = self._ro_one("""
-            SELECT score, tier, de_density, signals_used, model_version
+            SELECT fit_score, tier_v2 AS tier, de_density, signals_used, model_version
             FROM account_fit_scores WHERE account_id = %s
             ORDER BY scored_at DESC LIMIT 1
         """, (db_id,))
@@ -174,9 +176,9 @@ class PostgresBackend:
         return {
             "account_id": key,
             "account_name": name,
-            "fit_score": float(fit["score"]) if fit and fit.get("score") else None,
-            "tier": (fit["tier"] if fit else None) or acct.get("tier"),
-            "de_density": float(fit["de_density"]) if fit and fit.get("de_density") else None,
+            "fit_score": float(fit["fit_score"]) if fit and fit.get("fit_score") is not None else None,
+            "tier": fit["tier"] if fit else None,
+            "de_density": float(fit["de_density"]) if fit and fit.get("de_density") is not None else None,
             "reasons": [],
             "highlights": highlights,
         }
