@@ -147,15 +147,38 @@ The drafter only reads `approved-examples.jsonl` for voice training (Step 2). Qu
 
 Training mode generates drafts for human review to build the approved examples library.
 
+The critic is the gate. It throws weak drafts away on its own — only drafts it scores as confidently great reach Slack. This mirrors the LinkedIn agent's pass/minor_edit/fail loop: a draft that the critic fails after the rewrite budget is exhausted is terminal and never surfaced. Sol's review time is spent only on drafts the critic already believes are good, not on rating crap.
+
 ### How it works
 
 1. Read `/workspace/group/email-data/approved-examples.jsonl` to count current examples
 2. Pick accounts that have timing signals. Use `get_timing_signals` to find 5-10 accounts with active signals.
 3. For each account, run the full workflow (research → plan → draft → critic) but do NOT log to Airtable
-4. Post each draft to Slack with the critic scores, then ask:
+
+### Auto-discard gate
+
+The critic's decision is the threshold. Do not invent a separate numeric cutoff — `SHIP` already means "all dimensions 3+, factual safety 5, positioning 4+, average 4+", which is the confidently-great bar.
+
+For each account, after the critic returns:
+
+- **KILL** → discard silently. Append a discard entry to `/workspace/group/email-data/revision-log.jsonl` (schema below). Do NOT post to Slack. Move to next account.
+- **REWRITE** → run up to 2 rewrite cycles (pass `rewrite_instructions` + plan + research back to the drafter, re-run the critic with `company_context`). If a cycle returns `SHIP`, treat it as SHIP below. If the draft is still `REWRITE` or `KILL` after 2 cycles, discard silently — append a discard entry to `revision-log.jsonl`, do NOT post to Slack, move to next account.
+- **SHIP** → this is a confidently-great draft. Surface it (next section).
+
+Discard entry schema (append one line per discarded account):
+
+```json
+{"timestamp": "ISO", "account": "name", "reason": "auto_discard_kill | auto_discard_rewrite_exhausted", "feedback": "critic kill_reason, or the last cycle's rewrite_instructions", "original_draft": "best/last draft text", "critic_scores": {}, "rewrite_count": 0-2, "discarded": true}
+```
+
+Discards are silent by design. Do not post them to Slack, not even a summary line per account — they only land in `revision-log.jsonl`.
+
+### Surfacing a SHIP draft
+
+Only `SHIP` drafts post to Slack. For each one:
 
 ```
-**Training draft [n/total]**
+**Training draft — SHIP** (account [k] of [total] · [j] surfaced · [m] auto-discarded so far)
 
 [full draft output with critic scores]
 
@@ -165,9 +188,18 @@ Rate this draft:
 :x: Reject (tell me why)
 ```
 
-5. On approve: save to the bucket chosen by the same split rule as Step 8 — `approved-examples.jsonl` for signal-anchored drafts, `generic-safe-examples.jsonl` for qualitative-only drafts. Include `anchor_type` in the entry.
-6. On critique: save feedback to revision-log.jsonl, redraft, post again
-7. On reject: save feedback to revision-log.jsonl, move to next account
+- On approve: save to the bucket chosen by the same split rule as Step 8 — `approved-examples.jsonl` for signal-anchored drafts, `generic-safe-examples.jsonl` for qualitative-only drafts. Include `anchor_type` in the entry.
+- On critique: save feedback to revision-log.jsonl, redraft, post again
+- On reject: save feedback to revision-log.jsonl, move to next account
+
+### End-of-run summary
+
+After all accounts are processed, post one summary to Slack:
+
+```
+**Training run complete** — [total] accounts · [j] surfaced for review · [m] auto-discarded
+Discards: [count] KILL · [count] rewrite-exhausted (see revision-log.jsonl)
+```
 
 Goal: build 10-20 approved examples that define Sol's voice.
 
